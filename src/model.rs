@@ -1,19 +1,24 @@
 
-struct Identifier {
-    path: Vec<String>,
-    name: String
+#[derive(Debug, PartialEq)]
+pub(crate) struct Identifier {
+    pub(crate) path: Vec<String>,
+    pub(crate) name: String
 }
 
+#[derive(Debug, PartialEq)]
 struct EnumVariantIdentifier {
     enum_identifier: Identifier,
     variant: String
 }
 
-struct EnumTrait {
-    identifer: Identifier
+#[derive(Debug, PartialEq)]
+pub(crate) struct EnumTrait {
+    pub(crate) identifer: Identifier,
+    pub(crate) methods: Vec<Method>
 }
 
-enum ReturnType {
+#[derive(Debug, PartialEq)]
+pub(crate) enum ReturnType {
     StaticStr,
     UnsignedSize,
     UnsignedInteger64,
@@ -27,7 +32,8 @@ enum ReturnType {
     Relation
 }
 
-enum AttributeDefinition {
+#[derive(Debug, PartialEq)]
+pub(crate) enum AttributeDefinition {
     StaticStr(StaticStrAttributeDefinition),
     UnsignedSize(NumberAttributeDefinition<usize>),
     UnsignedInteger64(NumberAttributeDefinition<u64>),
@@ -41,48 +47,57 @@ enum AttributeDefinition {
     Relation(RelationAttributeDefinition)
 }
 
-struct NumberAttributeDefinition<N> {
+#[derive(Debug, PartialEq)]
+pub(crate) struct NumberAttributeDefinition<N> {
     default: Option<N>,
     start: Option<N>,
     increment: Option<N>,
 }
 
+#[derive(Debug, PartialEq)]
 struct StringFormat {
     format_string: String,
     arguments: Vec<String> //TODO: Vec<Method>?
 }
 
-struct StaticStrAttributeDefinition {
+#[derive(Debug, PartialEq)]
+pub(crate) struct StaticStrAttributeDefinition {
     default: Option<String>,
     format: Option<StringFormat>
 }
 
-struct EnumVariantAttributeDefinition {
+#[derive(Debug, PartialEq)]
+pub(crate) struct EnumVariantAttributeDefinition {
     enum_identifier: Identifier,
     default: Option<EnumVariantIdentifier>
 }
 
+#[derive(Debug, PartialEq)]
 enum RelationshipType {
     OneToMany,
     ManyToOne
 }
 
-struct RelationAttributeDefinition {
+#[derive(Debug, PartialEq)]
+pub(crate) struct RelationAttributeDefinition {
     enumtrait_identifier: Identifier,
     relationship_type: RelationshipType
 }
 
-struct Method {
-    name: String,
-    return_type: ReturnType,
-    attribute_definition: AttributeDefinition
+#[derive(Debug, PartialEq)]
+pub(crate) struct Method {
+    pub(crate) name: String,
+    pub(crate) return_type: ReturnType,
+    pub(crate) attribute_definition: AttributeDefinition
 }
 
+#[derive(Debug, PartialEq)]
 struct Attribute {
     name: String,
     value: Value
 }
 
+#[derive(Debug, PartialEq)]
 enum Value {
     StaticStr(&'static str),
     UnsignedInteger64(u64),

@@ -1,7 +1,9 @@
+#![allow(dead_code)]
+#![allow(unused_imports)]
+
 #[cfg(test)]
 mod tests { 
     extern crate traitenum;
-    use traitenum::enumtrait;
 
     #[test]
     fn sample_usage() {
@@ -63,7 +65,15 @@ mod tests {
         //#[traitenum(method(ordinal), ordinal)]
         //#[traitenum(method(cuisine), relation(Cuisine), one)]
 
-        #[enumtrait]
+        /*traitenum::enumtrait!{
+            name: str { key: value },
+            column: serial { start: 1, increment: 1 },
+            prompt: relation { enum: Cuisine, type: one-to-many }
+        };*/
+        traitenum::enumtrait!{
+            column: u64 { start: 1 }
+        }
+
         trait FastFoodTrait {
             fn ordinal(&self) -> usize;
             fn name(&self) -> &'static str;
