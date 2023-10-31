@@ -83,8 +83,6 @@ struct Attribute {
     value: Value
 }
 
-type EnumVariantValue = (Identifier, String);
-
 enum Value {
     StaticStr(&'static str),
     UnsignedInteger64(u64),
@@ -94,6 +92,7 @@ enum Value {
     Integer32(i32),
     Float32(f32),
     Byte(u8),
-    EnumVariant(EnumVariantValue)
+    EnumVariant(EnumVariantIdentifier),
+    Relation(EnumVariantIdentifier)
 }
 

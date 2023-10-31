@@ -1,6 +1,7 @@
 #[cfg(test)]
 mod tests { 
-    use traitenum;
+    extern crate traitenum;
+    use traitenum::enumtrait;
 
     #[test]
     fn sample_usage() {
@@ -61,6 +62,8 @@ mod tests {
         //#[traitenum(method(prompt), format("Would you like some {}?", name))]
         //#[traitenum(method(ordinal), ordinal)]
         //#[traitenum(method(cuisine), relation(Cuisine), one)]
+
+        #[enumtrait]
         trait FastFoodTrait {
             fn ordinal(&self) -> usize;
             fn name(&self) -> &'static str;
