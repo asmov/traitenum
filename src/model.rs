@@ -1,23 +1,24 @@
+use serde;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub(crate) struct Identifier {
     pub(crate) path: Vec<String>,
     pub(crate) name: String
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 struct EnumVariantIdentifier {
     enum_identifier: Identifier,
     variant: String
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub(crate) struct EnumTrait {
     pub(crate) identifer: Identifier,
     pub(crate) methods: Vec<Method>
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub(crate) enum ReturnType {
     StaticStr,
     UnsignedSize,
@@ -32,7 +33,7 @@ pub(crate) enum ReturnType {
     Relation
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub(crate) enum AttributeDefinition {
     StaticStr(StaticStrAttributeDefinition),
     UnsignedSize(NumberAttributeDefinition<usize>),
@@ -47,59 +48,59 @@ pub(crate) enum AttributeDefinition {
     Relation(RelationAttributeDefinition)
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub(crate) struct NumberAttributeDefinition<N> {
     default: Option<N>,
     start: Option<N>,
     increment: Option<N>,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 struct StringFormat {
     format_string: String,
     arguments: Vec<String> //TODO: Vec<Method>?
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub(crate) struct StaticStrAttributeDefinition {
     default: Option<String>,
     format: Option<StringFormat>
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub(crate) struct EnumVariantAttributeDefinition {
     enum_identifier: Identifier,
     default: Option<EnumVariantIdentifier>
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 enum RelationshipType {
     OneToMany,
     ManyToOne
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub(crate) struct RelationAttributeDefinition {
     enumtrait_identifier: Identifier,
     relationship_type: RelationshipType
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub(crate) struct Method {
     pub(crate) name: String,
     pub(crate) return_type: ReturnType,
     pub(crate) attribute_definition: AttributeDefinition
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 struct Attribute {
     name: String,
     value: Value
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 enum Value {
-    StaticStr(&'static str),
+    StaticStr(String),
     UnsignedInteger64(u64),
     Integer64(i64),
     Float64(f64),
