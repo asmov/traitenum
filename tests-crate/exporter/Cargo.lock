@@ -61,13 +61,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "testcrate"
-version = "0.1.0"
-dependencies = [
- "traitenum",
-]
-
-[[package]]
 name = "traitenum"
 version = "0.1.0"
 dependencies = [
@@ -76,6 +69,13 @@ dependencies = [
  "quote",
  "serde",
  "syn",
+]
+
+[[package]]
+name = "traitenum-testcrate-exporter"
+version = "0.1.0"
+dependencies = [
+ "traitenum",
 ]
 
 [[package]]
