@@ -1,5 +1,5 @@
 [package]
-name = "traitenum-testcrate-exporter"
+name = "traitenum-testcrate-exporter-heavy-macro"
 version = "0.1.0"
 edition = "2021"
 

@@ -1,0 +1,7 @@
+[package]
+name = "traitenum-testcrate-exporter-heavy-lib"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+traitenum = { version = "0.1.0", path = "../../.." }
