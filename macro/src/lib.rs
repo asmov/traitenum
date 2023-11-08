@@ -1,24 +1,9 @@
 use quote::{self, ToTokens};
 use syn::spanned::Spanned;
-use syn::{self, parse};
+use syn;
 use proc_macro2;
 
-mod model;
-
-impl parse::Parse for model::Identifier {
-    fn parse(input: parse::ParseStream) -> syn::Result<Self> {
-        let mut full_path: syn::Path = input.parse().map_err(|_| syn::Error::new(input.span(),
-            "Unable to parse trait #enumtrait(<absolute trait path>)"))?;
-        let name = full_path.segments.pop()
-            .ok_or(syn::Error::new(input.span(), "enumtrait: Unable to parse trait name"))?
-            .value().ident.to_string();
-        let path = full_path.segments.pairs()
-            .map(|pair| pair.value().ident.to_string())
-            .collect();
-
-        Ok(Self::new(path, name))
-    }
-}
+use tratenum_lib::model;
 
 #[proc_macro_attribute]
 pub fn enumtrait(attr: proc_macro::TokenStream, item: proc_macro::TokenStream) -> proc_macro::TokenStream {
@@ -78,36 +63,3 @@ fn parse_enumtrait(attr: proc_macro::TokenStream, item: proc_macro::TokenStream)
 
    Ok(item.to_token_stream())
 }
-
-impl parse::Parse for model::EnumTrait {
-    fn parse(input: parse::ParseStream) -> syn::Result<Self> {
-        let name: syn::Ident = input.parse()?;
-        input.parse::<syn::Token![:]>()?;
-        let return_type: syn::Type = input.parse()?;
-        dbg!(return_type.to_token_stream());
-        let content;
-        let _brace = syn::braced!(content in input);
-        let _fields = content.parse_terminated(Field::parse, syn::Token![,]);
-        Ok(Self {
-            identifer: model::Identifier::new(Vec::new(), name.to_string()),
-            methods: Vec::new()
-        })
-    }
-}
-
-struct Field {
-
-}
-
-impl parse::Parse for Field {
-    fn parse(input: parse::ParseStream) -> syn::Result<Self> {
-        let key: syn::Ident = input.parse()?;
-        dbg!(key.to_token_stream());
-        input.parse::<syn::Token![:]>()?;
-        let value: syn::Expr = input.parse()?;
-        dbg!(value.to_token_stream());
-        Ok(Self {
-        })
-    }
-}
-

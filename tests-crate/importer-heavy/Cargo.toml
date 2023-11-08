@@ -1,8 +1,0 @@
-[package]
-name = "traitenum-testcrate-importer-heavy"
-version = "0.1.0"
-edition = "2021"
-
-[dependencies]
-traitenum = { version = "0.1.0", path = "../.." }
-traitenum-testcrate-exporter = { version = "0.1.0", path = "../exporter" }

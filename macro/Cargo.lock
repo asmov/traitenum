@@ -72,13 +72,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "traitenum-testcrate-exporter"
-version = "0.1.0"
-dependencies = [
- "traitenum",
-]
-
-[[package]]
 name = "unicode-ident"
 version = "1.0.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
