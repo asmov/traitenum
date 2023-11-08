@@ -86,9 +86,6 @@ mod tests {
             column: serial { start: 1, increment: 1 },
             prompt: relation { enum: Cuisine, type: one-to-many }
         };*/
-        traitenum::traitmodel!{
-            column: u64 { start: 1 }
-        }
 
         trait FastFoodTrait {
             fn ordinal(&self) -> usize;
