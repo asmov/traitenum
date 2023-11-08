@@ -1,4 +1,4 @@
-use tratenum_lib as lib;
+use traitenum_lib as lib;
 
 #[proc_macro_attribute]
 pub fn enumtrait(attr: proc_macro::TokenStream, item: proc_macro::TokenStream) -> proc_macro::TokenStream {

@@ -65,11 +65,11 @@ name = "traitenum"
 version = "0.1.0"
 dependencies = [
  "proc-macro2",
- "tratenum-lib",
+ "traitenum-lib",
 ]
 
 [[package]]
-name = "tratenum-lib"
+name = "traitenum-lib"
 version = "0.1.0"
 dependencies = [
  "bincode",
@@ -77,6 +77,23 @@ dependencies = [
  "quote",
  "serde",
  "syn",
+]
+
+[[package]]
+name = "traitenum-test-exporter-lib"
+version = "0.1.0"
+dependencies = [
+ "bincode",
+ "traitenum",
+ "traitenum-lib",
+]
+
+[[package]]
+name = "traitenum-test-exporter-macro"
+version = "0.1.0"
+dependencies = [
+ "traitenum-lib",
+ "traitenum-test-exporter-lib",
 ]
 
 [[package]]

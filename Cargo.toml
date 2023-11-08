@@ -3,5 +3,7 @@ resolver = "2"
 
 members = [
     "lib",
-    "macro"
+    "macro",
+    "tests/exporter/lib",
+    "tests/exporter/macro"
 ]

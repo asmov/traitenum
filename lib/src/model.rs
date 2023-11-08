@@ -137,3 +137,9 @@ pub enum Value {
     Relation(EnumVariantIdentifier)
 }
 
+impl From<&'static [u8]> for EnumTrait {
+    fn from(bytes: &'static [u8]) -> Self {
+        bincode::deserialize(bytes).unwrap()
+    }
+}
+

@@ -1,0 +1,11 @@
+[package]
+name = "traitenum-test-exporter-macro"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+traitenum-lib = { version = "0.1.0", path = "../../../lib" }
+traitenum-test-exporter-lib = { version = "0.1.0", path = "../lib" }
