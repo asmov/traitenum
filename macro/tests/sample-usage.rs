@@ -3,8 +3,8 @@
 
 #[cfg(test)]
 mod tests { 
-    extern crate traitenum;
-
+    use traitenum;
+    
     #[test]
     fn attribute_model() {
         #[traitenum::enumtrait(crate::tests::MyTrait)]
@@ -12,7 +12,7 @@ mod tests {
             // test default parsing
             fn name(&self) -> &'static str;
             // test ordinal
-            #[traitenum::variant(name(Column), type(usize), default(ordinal))]
+            #[enumtrait(name(Column), type(usize), default(ordinal))]
             fn column(&self) -> usize;
             // test default implementation
             fn something_default(&self) {

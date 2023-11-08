@@ -7,9 +7,6 @@ edition = "2021"
 proc-macro = true
 
 [dependencies]
-bincode = "1.3.3"
 proc-macro2 = "1"
-quote = "1"
-syn = { version = "2", features = ["full"] }
 tratenum-lib = { version = "0.1.0", path = "../lib" }
 
