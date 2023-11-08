@@ -6,6 +6,22 @@ mod tests {
     extern crate traitenum;
 
     #[test]
+    fn attribute_model() {
+        #[traitenum::enumtrait(crate::tests::MyTrait)]
+        pub trait MyTrait {
+            // test default parsing
+            fn name(&self) -> &'static str;
+            // test ordinal
+            #[traitenum::variant(name(Column), type(usize), default(ordinal))]
+            fn column(&self) -> usize;
+            // test default implementation
+            fn something_default(&self) {
+                todo!();
+            }
+        }
+    }
+
+    #[test]
     fn sample_usage() {
         //#derive(traitenum::TraitEnum)
         //#traitenum(trait(CuisineTrait))
@@ -70,7 +86,7 @@ mod tests {
             column: serial { start: 1, increment: 1 },
             prompt: relation { enum: Cuisine, type: one-to-many }
         };*/
-        traitenum::enumtrait!{
+        traitenum::traitmodel!{
             column: u64 { start: 1 }
         }
 

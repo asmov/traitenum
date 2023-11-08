@@ -3,11 +3,76 @@
 
 use std::path::PathBuf;
 use std::{io, fs};
-use quote::{self, ToTokens};
-use syn::{self, parse};
+use quote::{self, ToTokens, TokenStreamExt};
+use syn::{self, parse, ItemTrait};
 use proc_macro2;
 
 mod model;
+
+impl parse::Parse for model::Identifier {
+    fn parse(input: parse::ParseStream) -> syn::Result<Self> {
+        let mut full_path: syn::Path = input.parse().map_err(|e| syn::Error::new(input.span(),
+            "Unable to parse trait #enumtrait(<absolute trait path>)"))?;
+        let name = full_path.segments.pop()
+            .ok_or(syn::Error::new(input.span(), "Unable to parse trait name"))?
+            .value().ident.to_string();
+        let path = full_path.segments.pairs()
+            .map(|pair| pair.value().ident.to_string())
+            .collect();
+
+        Ok(Self::new(path, name))
+    }
+}
+
+#[proc_macro_attribute]
+pub fn enumtrait(attr: proc_macro::TokenStream, item: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    let identifier = syn::parse_macro_input!(attr as model::Identifier);
+    dbg!(&identifier);
+    
+    let mut item = syn::parse_macro_input!(item as syn::ItemTrait);
+    if identifier.name() != item.ident.to_string() {
+        return proc_macro::TokenStream::from(
+            syn::Error::new(item.ident.span(),
+                format!("Trait name does not match #traitenum(<absolute trait path>): {}", identifier.name()))
+            .to_compile_error());
+    }
+
+    //dbg!(&item.ident);
+    //item.items.iter().for_each(|a| { dbg!(proc_macro::TokenStream::from(a.to_token_stream())); } );
+
+    let mut last_trait_item: Option<ItemTrait> = None;
+    for trait_item in &item.items {
+        match trait_item {
+            syn::TraitItem::Fn(it) => {
+                dbg!("Fn:");
+                for a in &it.attrs {
+                    dbg!(proc_macro::TokenStream::from(a.to_token_stream()));
+                }
+
+                //dbg!(proc_macro::TokenStream::from(it.to_token_stream()));
+            },
+            syn::TraitItem::Macro(it) => {
+                dbg!("Macro");
+                //dbg!(proc_macro::TokenStream::from(it.to_token_stream()));
+            },
+            syn::TraitItem::Verbatim(it) => {
+                dbg!("Verbatim");
+                //dbg!(proc_macro::TokenStream::from(it.to_token_stream()));
+            },
+            syn::TraitItem::Const(it) => {
+                dbg!("Const");
+                //dbg!(proc_macro::TokenStream::from(it.to_token_stream()));
+            },
+            syn::TraitItem::Type(it) => {
+                dbg!("Type");
+                //dbg!(proc_macro::TokenStream::from(it.to_token_stream()));
+            },
+            _ => todo!()
+        }
+    }
+
+    proc_macro::TokenStream::from(item.to_token_stream())
+} 
 
 impl parse::Parse for model::EnumTrait {
     fn parse(input: parse::ParseStream) -> syn::Result<Self> {
@@ -19,7 +84,7 @@ impl parse::Parse for model::EnumTrait {
         let brace = syn::braced!(content in input);
         let fields = content.parse_terminated(Field::parse, syn::Token![,]);
         Ok(Self {
-            identifer: model::Identifier{ path: Vec::new(), name: name.to_string()},
+            identifer: model::Identifier::new(Vec::new(), name.to_string()),
             methods: Vec::new()
         })
     }
@@ -41,56 +106,3 @@ impl parse::Parse for Field {
     }
 }
 
-#[proc_macro]
-pub fn enumtrait(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    let etrait = syn::parse_macro_input!(input as model::EnumTrait);
-    //let input = syn::parse_macro_input!(input as syn::DeriveInput);
-    //let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();*/
-
-    println!("DEBUG");
-    dbg!(&etrait);
-    write_trait(&etrait);
-    let etrait2 = read_trait(&etrait.identifer.name);
-    dbg!(&etrait2);
-    //dbg!(&input.into_token_stream());
-
-    let output = quote::quote!{};
-    proc_macro::TokenStream::from(output)
-}
-#[proc_macro]
-pub fn loadtrait(_input: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    let etrait = read_trait("column");
-    dbg!(&etrait);
-
-    let output = quote::quote!{};
-    proc_macro::TokenStream::from(output)
-}
- 
-
-fn write_trait(enum_trait: &model::EnumTrait) {
-    let filepath = trait_filepath(&enum_trait.identifer.name);
-    dbg!(&filepath);
-    let mut bufwriter = io::BufWriter::new(
-        fs::File::create(filepath).unwrap());
-
-    bincode::serialize_into(&mut bufwriter, &enum_trait).unwrap(); 
-}
-
-fn read_trait(enumtrait_identifier: &str) -> model::EnumTrait {
-    let filepath = trait_filepath(enumtrait_identifier);
-    let bufreader = io::BufReader::new(
-        fs::File::open(filepath).unwrap());
-    let enum_trait = bincode::deserialize_from(bufreader).unwrap();
-    enum_trait
-}
-
-
-fn trait_filepath(enumtrait_identifier: &str) -> PathBuf {
-    out_dir()
-        .join(enumtrait_identifier.to_string()
-            + ".traitenum.trait.bin")
-}
-
-fn out_dir() -> PathBuf {
-    PathBuf::from(std::env::var("ENUMTRAIT_OUT_DIR").unwrap()).canonicalize().unwrap()
-}

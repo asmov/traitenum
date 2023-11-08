@@ -1,9 +1,21 @@
 use serde;
 
 #[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize)]
-pub(crate) struct Identifier {
-    pub(crate) path: Vec<String>,
-    pub(crate) name: String
+pub struct Identifier {
+    path: Vec<String>,
+    name: String
+}
+
+impl Identifier {
+    pub fn path(&self) -> &[String] { &self.path }
+    pub fn name(&self) -> &str { &self.name }
+
+    pub fn new(path: Vec<String>, name: String) -> Self {
+        Self {
+            path,
+            name
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize)]
