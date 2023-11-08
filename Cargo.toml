@@ -4,6 +4,8 @@ resolver = "2"
 members = [
     "lib",
     "macro",
-    "tests/exporter/lib",
-    "tests/exporter/macro"
+    "tests/exporter/traits",
+    "tests/exporter/macrolib",
+    "tests/exporter/macro",
+    "tests/importer",
 ]

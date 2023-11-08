@@ -1,5 +1,5 @@
 [package]
-name = "traitenum-test-exporter-lib"
+name = "traitenum-test-exporter-traits"
 version = "0.1.0"
 edition = "2021"
 

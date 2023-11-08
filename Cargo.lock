@@ -80,7 +80,26 @@ dependencies = [
 ]
 
 [[package]]
-name = "traitenum-test-exporter-lib"
+name = "traitenum-test-exporter-macro"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "traitenum-test-exporter-macrolib",
+]
+
+[[package]]
+name = "traitenum-test-exporter-macrolib"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+ "traitenum-lib",
+ "traitenum-test-exporter-traits",
+]
+
+[[package]]
+name = "traitenum-test-exporter-traits"
 version = "0.1.0"
 dependencies = [
  "bincode",
@@ -89,11 +108,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "traitenum-test-exporter-macro"
+name = "traitenum-test-importer"
 version = "0.1.0"
 dependencies = [
- "traitenum-lib",
- "traitenum-test-exporter-lib",
+ "traitenum-test-exporter-macro",
+ "traitenum-test-exporter-traits",
 ]
 
 [[package]]
