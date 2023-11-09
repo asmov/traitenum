@@ -1,13 +1,12 @@
-use std::sync::OnceLock;
 use syn::{self, spanned::Spanned};
 use quote;
 
 use traitenum_lib::model as model;
-use traitenum_test_exporter_traits as traits;
 
-pub fn parse_derive_exporter_traitenum(item: proc_macro2::TokenStream) -> Result<proc_macro2::TokenStream, syn::Error> {
-    static MODEL: OnceLock<model::EnumTrait> = OnceLock::new();
-    let model = MODEL.get_or_init(|| model::EnumTrait::from(traits::MODEL_SIMPLETRAIT as &'static [u8]));
+pub fn parse_derive_traitenum(
+        item: proc_macro2::TokenStream,
+        model_bytes: &'static [u8]) -> Result<proc_macro2::TokenStream, syn::Error> {
+    let model = model::EnumTrait::from(model_bytes);
 
     let item: syn::DeriveInput = syn::parse2(item)?;
 

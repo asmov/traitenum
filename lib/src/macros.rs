@@ -31,7 +31,7 @@ pub fn enumtrait_macro(attr: proc_macro2::TokenStream, item: proc_macro2::TokenS
         -> Result<proc_macro2::TokenStream, syn::Error> {
     let EnumTraitMacroOutput {tokens, model} = parse_enumtrait(attr, item)?;
     let model_name = syn::Ident::new(
-        &format!("MODEL_{}", model.identifier().name().to_uppercase()), tokens.span());
+        &format!("TRAITENUM_{}", model.identifier().name().to_uppercase()), tokens.span());
 
     let bytes = &bincode::serialize(&model).unwrap();
     let bytes_len = bytes.len();

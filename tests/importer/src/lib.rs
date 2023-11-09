@@ -1,7 +1,7 @@
 use traitenum_test_exporter_macro as traitmacro;
 use traitenum_test_exporter_traits::SimpleTrait;
 
-#[derive(traitmacro::ExporterTraitEnum)]
+#[derive(traitmacro::SimpleTraitEnum)]
 pub enum ImporterEnum {
     #[traitenum(name("alpha"))]
     Alpha,

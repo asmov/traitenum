@@ -84,7 +84,9 @@ name = "traitenum-test-exporter-macro"
 version = "0.1.0"
 dependencies = [
  "proc-macro2",
+ "traitenum-lib",
  "traitenum-test-exporter-macrolib",
+ "traitenum-test-exporter-traits",
 ]
 
 [[package]]
@@ -95,7 +97,6 @@ dependencies = [
  "quote",
  "syn",
  "traitenum-lib",
- "traitenum-test-exporter-traits",
 ]
 
 [[package]]

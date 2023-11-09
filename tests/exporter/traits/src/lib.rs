@@ -12,7 +12,7 @@ mod tests {
 
     #[test]
     fn test_load_model() {
-        let bytes = super::MODEL_SIMPLETRAIT;
+        let bytes = super::TRAITENUM_SIMPLETRAIT;
         let _model: traitenum_lib::model::EnumTrait = bincode::deserialize(bytes).unwrap();
     }
 }
