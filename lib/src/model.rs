@@ -43,7 +43,7 @@ impl EnumTrait {
 }
 
 
-#[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(Copy, Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum ReturnType {
     StaticStr,
     UnsignedSize,
@@ -73,6 +73,24 @@ pub enum AttributeDefinition {
     Relation(RelationAttributeDefinition)
 }
 
+impl From<ReturnType> for AttributeDefinition {
+    fn from(return_type: ReturnType) -> Self {
+        match return_type {
+            ReturnType::StaticStr => AttributeDefinition::StaticStr(StaticStrAttributeDefinition { default: None, format: None }),
+            ReturnType::UnsignedSize => AttributeDefinition::UnsignedSize(NumberAttributeDefinition { default: Some(0), start: None, increment: None }),
+            ReturnType::UnsignedInteger64 => todo!(),
+            ReturnType::Integer64 => todo!(),
+            ReturnType::Float64 => todo!(),
+            ReturnType::UnsignedInteger32 => todo!(),
+            ReturnType::Integer32 => todo!(),
+            ReturnType::Float32 => todo!(),
+            ReturnType::Byte => todo!(),
+            ReturnType::EnumVariant => todo!(),
+            ReturnType::Relation => todo!(),
+        }
+    }
+}
+
 #[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct NumberAttributeDefinition<N> {
     default: Option<N>,
@@ -88,8 +106,8 @@ pub struct StringFormat {
 
 #[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct StaticStrAttributeDefinition {
-    default: Option<String>,
-    format: Option<StringFormat>
+    pub default: Option<String>,
+    pub format: Option<StringFormat>
 }
 
 #[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -115,6 +133,20 @@ pub struct Method {
     name: String,
     return_type: ReturnType,
     attribute_definition: AttributeDefinition
+}
+
+impl Method {
+    pub fn name(&self) -> &str { &self.name }
+    pub fn return_type(&self) -> &ReturnType { &self.return_type }
+    pub fn attribute_definition(&self) -> &AttributeDefinition { &self.attribute_definition }
+
+    pub fn new(name: String, return_type: ReturnType, attribute_definition: AttributeDefinition) -> Self {
+        Self {
+            name,
+            return_type,
+            attribute_definition
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize)]

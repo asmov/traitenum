@@ -1,3 +1,4 @@
+use quote::ToTokens;
 use syn::{self, parse};
 
 use crate::model;
@@ -14,5 +15,21 @@ impl parse::Parse for model::Identifier {
             .collect();
 
         Ok(Self::new(path, name))
+    }
+}
+
+impl TryFrom<&syn::Path> for model::ReturnType {
+    type Error = String;
+
+    fn try_from(path: &syn::Path) -> Result<Self, Self::Error> {
+        let ident = match path.get_ident() {
+            Some(v) => v.to_string(),
+            None => return Err(format!("Unsupported return type: {}", path.to_token_stream().to_string()))
+        };
+
+        match ident.as_str() {
+            "usize" => Ok(model::ReturnType::UnsignedSize),
+            _ => Err(format!("Unsupported return type: {}", path.to_token_stream().to_string()))
+        }
     }
 }
