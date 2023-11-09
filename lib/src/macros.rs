@@ -5,37 +5,11 @@ use proc_macro2;
 use bincode;
 
 use crate::model;
+use crate::parse::{self, ParseAttribute};
+use crate::{synerr, mksynerr, ATTRIBUTE_HELPER_NAME};
 
 const ERROR_PREFIX: &'static str = "traitenum: ";
 const MODEL_PREFIX: &'static str = "TRAITENUM_";
-const ATTRIBUTE_HELPER_NAME: &'static str = "traitenum";
-
-macro_rules! err {
-    ($span:expr, $message:expr) => {
-        return Err(syn::Error::new($span, format!("{}{}", ERROR_PREFIX, $message)))
-    };
-    ($span:expr, $message:literal, $($v:expr),+) => {
-        return Err(syn::Error::new($span, format!("{}{}", ERROR_PREFIX, format!($message
-        $(
-            , $v
-        )+
-        ))))
-    };
-}
-
-macro_rules! mkerr {
-    ($span:expr, $message:expr) => {
-        syn::Error::new($span, format!("{}{}", ERROR_PREFIX, $message))
-    };
-    ($span:expr, $message:literal, $($v:expr),+) => {
-        syn::Error::new($span, format!("{}{}", ERROR_PREFIX, format!($message
-        $(
-            , $v
-        )+
-        )))
-    };
-}
-
 
 #[derive(Debug)]
 struct EnumTraitMacroOutput {
@@ -68,7 +42,7 @@ fn parse_enumtrait(attr: proc_macro2::TokenStream, item: proc_macro2::TokenStrea
     
     let mut item: syn::ItemTrait = syn::parse2(item)?;
     if identifier.name() != item.ident.to_string() {
-        err!(item.ident.span(),
+        synerr!(item.ident.span(),
             "Trait name does not match #enumtrait(<absolute trait path>): {}", identifier.name());
     }
 
@@ -85,27 +59,28 @@ fn parse_enumtrait(attr: proc_macro2::TokenStream, item: proc_macro2::TokenStrea
                     continue;
                 }
 
+                let method_name = func.sig.ident.to_string();
                 let mut return_type: Option<model::ReturnType> = None;
 
                 match &func.sig.output {
-                    syn::ReturnType::Default => err!(trait_item.span(),
+                    syn::ReturnType::Default => synerr!(trait_item.span(),
                         "Default return types () are not supported"),
                     syn::ReturnType::Type(_, ref returntype) => match **returntype {
                         syn::Type::Path(ref path_type) => {
                             return_type = match model::ReturnType::try_from(&path_type.path) {
                                 Ok(v) => Some(v),
-                                Err(e) => err!(trait_item.span(), e)
+                                Err(e) => synerr!(trait_item.span(), e)
                             };
                         },
                         syn::Type::Reference(ref ref_type) => {
-                            // only ellided and static lifetimes are supported
+                            // only elided and static lifetimes are supported
                             let _has_static_lifetime = match &ref_type.lifetime {
                                 Some(lifetime) => {
                                     if "static" == lifetime.ident.to_string() {
                                         true
                                     } else {
-                                        err!(trait_item.span(),
-                                            "Only ellided and static lifetimes are supported for return types")
+                                        synerr!(trait_item.span(),
+                                            "Only elided and static lifetimes are supported for return types")
                                     }
                                 },
                                 None => false
@@ -113,7 +88,7 @@ fn parse_enumtrait(attr: proc_macro2::TokenStream, item: proc_macro2::TokenStrea
 
                             // mutability isn not supported
                             if ref_type.mutability.is_some() {
-                                err!(trait_item.span(), "Mutable return types are not supported")
+                                synerr!(trait_item.span(), "Mutable return types are not supported")
                             }
 
                             match *ref_type.elem {
@@ -128,7 +103,7 @@ fn parse_enumtrait(attr: proc_macro2::TokenStream, item: proc_macro2::TokenStrea
                                         todo!("lookup the return reference type");
                                     }
                                 },
-                                _ => err!(trait_item.span(),
+                                _ => synerr!(trait_item.span(),
                                     "Unsupported return reference type: {}", ref_type.to_token_stream().to_string())
                             }
                         },
@@ -136,68 +111,54 @@ fn parse_enumtrait(attr: proc_macro2::TokenStream, item: proc_macro2::TokenStrea
                     },
                 }
 
-                let return_type = return_type.ok_or(mkerr!(trait_item.span(), "Uable to parse return type!!"))?;
-                let mut attribute_def = model::AttributeDefinition::from(return_type);
+                let return_type = return_type.ok_or(mksynerr!(trait_item.span(), "Uable to parse return type!!"))?;
 
+                // expected: traitenum::<AttributeDefinition>. we match against the 'traitenum' segment to get started.
                 let attrib = func.attrs.iter().find(|attrib| {
-                    let last_path_segment = attrib.path().segments.last();
-                    last_path_segment.is_some()
-                        && ATTRIBUTE_HELPER_NAME != last_path_segment.unwrap().ident.to_string() 
+                    attrib.path().segments.first().is_some_and(|s| ATTRIBUTE_HELPER_NAME == s.ident.to_string())
                 });
 
-                if let Some(attrib) = attrib {
-                    attrib.parse_nested_meta(|meta| {
-                        let ident_name = meta.path.get_ident()
-                            .ok_or(mkerr!(trait_item.span(), "Empty attribute"))?
-                            .to_string();
+                let attribute_def = if let Some(attrib) = attrib {
+                    parse::parse_attribute(attrib, trait_item.span(), return_type)?
+                } else {
+                    model::AttributeDefinition::from(return_type)
+                };
 
-                        let content;
-                        syn::parenthesized!(content in meta.input);
-
-                        match &mut attribute_def {
-                            model::AttributeDefinition::StaticStr(ref strdef) => {
-                                match ident_name.as_str() {
-                                    "default" => strdef.default = Some(content.parse::<syn::LitStr>()?.value()),
-                                    "format" => {}
-                                }
-                            },
-                            model::AttributeDefinition::UnsignedSize(_) => todo!(),
-                            model::AttributeDefinition::UnsignedInteger64(_) => todo!(),
-                            model::AttributeDefinition::Integer64(_) => todo!(),
-                            model::AttributeDefinition::Float64(_) => todo!(),
-                            model::AttributeDefinition::UnsignedInteger32(_) => todo!(),
-                            model::AttributeDefinition::Integer32(_) => todo!(),
-                            model::AttributeDefinition::Float32(_) => todo!(),
-                            model::AttributeDefinition::Byte(_) => todo!(),
-                            model::AttributeDefinition::EnumVariant(_) => todo!(),
-                            model::AttributeDefinition::Relation(_) => todo!(),
-                        }
-
-                        Ok(())
-                    })?;
-                }
-
-                let method = model::Method::new(func.sig.ident.to_string(), return_type, attribute_def);
+                let method = model::Method::new(method_name, return_type, attribute_def);
                 methods.push(method);
                 
             },
             syn::TraitItem::Type(_) => {
-                todo!()
+                todo!("type")
             },
             syn::TraitItem::Macro(_) => {},
             syn::TraitItem::Verbatim(_) => {},
             syn::TraitItem::Const(_) => {},
-            _ => {} 
+            _ => () 
         }
     }
 
-    // remove all enumtrait helper attributes
+    // strip out all #traitenum helper attributes
     for trait_item in &mut item.items {
         match trait_item {
             syn::TraitItem::Fn(func) => {
-                func.attrs.clear();  //TODO: only delete our stuff
-            }
-            _ => {}
+                let mut count = 0;  
+                func.attrs.retain(|attrib| {
+                    if attrib.path().segments.first() .is_some_and(|s| ATTRIBUTE_HELPER_NAME == s.ident.to_string()) {
+                        count += 1;
+                        false
+                    } else {
+                        true
+                    }
+                });
+
+                // we only process one attribute helper per method. curtail expectations with an error.
+                if count > 1 {
+                    synerr!(trait_item.span(), "Only one #traitenum helper attribute per method is supported");
+                }
+            
+            },
+            _ => ()
         }
     }
 
@@ -221,12 +182,14 @@ mod tests {
             pub trait MyTrait {
                 // test default parsing
                 fn name(&self) -> &'static str;
+                #[traitenum::Str(default(":)"))]
+                fn emote(&self) -> &'static str;
                 // test ordinal
-                #[traitenum::variant(name(Column), type(usize), default(ordinal))]
+                #[traitenum::Num(default(44))]
                 fn column(&self) -> usize;
                 // test default implementation
                 fn something_default(&self) {
-                    todo!();
+                    todo!("done");
                 }
             }
         };

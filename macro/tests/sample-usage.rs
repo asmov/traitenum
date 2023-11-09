@@ -12,7 +12,7 @@ mod tests {
             // test default parsing
             fn name(&self) -> &'static str;
             // test ordinal
-            #[enumtrait(name(Column), type(usize), default(ordinal))]
+            #[traitenum::Num(default(42))]
             fn column(&self) -> usize;
             // test default implementation
             fn something_default(&self) {

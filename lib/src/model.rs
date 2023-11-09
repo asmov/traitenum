@@ -1,30 +1,6 @@
 use serde;
 
 #[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize)]
-pub struct Identifier{
-    path: Vec<String>,
-    name: String
-}
-
-impl Identifier {
-    pub fn path(&self) -> &[String] { &self.path }
-    pub fn name(&self) -> &str { &self.name }
-
-    pub const fn new(path: Vec<String>, name: String) -> Self {
-        Self {
-            path,
-            name
-        }
-    }
-}
-
-#[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize)]
-pub struct EnumVariantIdentifier {
-    enum_identifier: Identifier,
-    variant: String
-}
-
-#[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct EnumTrait {
     identifier: Identifier,
     methods: Vec<Method>
@@ -42,6 +18,24 @@ impl EnumTrait {
     }
 }
 
+#[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct Identifier{
+    path: Vec<String>,
+    name: String
+}
+
+impl Identifier {
+    pub fn path(&self) -> &[String] { &self.path }
+    pub fn name(&self) -> &str { &self.name }
+
+    pub const fn new(path: Vec<String>, name: String) -> Self {
+        Self {
+            path,
+            name
+        }
+    }
+}
+
 
 #[derive(Copy, Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum ReturnType {
@@ -54,8 +48,8 @@ pub enum ReturnType {
     Integer32,
     Float32,
     Byte,
-    EnumVariant,
-    Relation
+    Type,
+    TypeReference
 }
 
 #[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -69,7 +63,7 @@ pub enum AttributeDefinition {
     Integer32(NumberAttributeDefinition<i32>),
     Float32(NumberAttributeDefinition<f32>),
     Byte(NumberAttributeDefinition<u8>),
-    EnumVariant(EnumVariantAttributeDefinition),
+    Type(TypeAttributeDefinition),
     Relation(RelationAttributeDefinition)
 }
 
@@ -85,17 +79,17 @@ impl From<ReturnType> for AttributeDefinition {
             ReturnType::Integer32 => todo!(),
             ReturnType::Float32 => todo!(),
             ReturnType::Byte => todo!(),
-            ReturnType::EnumVariant => todo!(),
-            ReturnType::Relation => todo!(),
+            ReturnType::Type => todo!(),
+            ReturnType::TypeReference => todo!(),
         }
     }
 }
 
 #[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct NumberAttributeDefinition<N> {
-    default: Option<N>,
-    start: Option<N>,
-    increment: Option<N>,
+    pub(crate) default: Option<N>,
+    pub(crate) start: Option<N>,
+    pub(crate) increment: Option<N>,
 }
 
 #[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -106,14 +100,15 @@ pub struct StringFormat {
 
 #[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct StaticStrAttributeDefinition {
-    pub default: Option<String>,
-    pub format: Option<StringFormat>
+    pub(crate) default: Option<String>,
+    pub(crate) format: Option<StringFormat>
 }
 
 #[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize)]
-pub struct EnumVariantAttributeDefinition {
-    enum_identifier: Identifier,
-    default: Option<EnumVariantIdentifier>
+pub struct TypeAttributeDefinition {
+    identifier: Identifier,
+    is_reference: bool,
+    default: Option<Identifier>
 }
 
 #[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -165,8 +160,8 @@ pub enum Value {
     Integer32(i32),
     Float32(f32),
     Byte(u8),
-    EnumVariant(EnumVariantIdentifier),
-    Relation(EnumVariantIdentifier)
+    Type(Identifier),
+    Relation(Identifier)
 }
 
 impl From<&'static [u8]> for EnumTrait {
