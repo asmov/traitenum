@@ -6,7 +6,8 @@ use bincode;
 
 use crate::model;
 
-const ERROR_PREFIX: &'static str = "enumtrait: ";
+const ERROR_PREFIX: &'static str = "traitenum: ";
+const MODEL_PREFIX: &'static str = "TRAITENUM_";
 
 macro_rules! err {
     ($span:expr, $message:literal) => {
@@ -31,7 +32,7 @@ pub fn enumtrait_macro(attr: proc_macro2::TokenStream, item: proc_macro2::TokenS
         -> Result<proc_macro2::TokenStream, syn::Error> {
     let EnumTraitMacroOutput {tokens, model} = parse_enumtrait(attr, item)?;
     let model_name = syn::Ident::new(
-        &format!("TRAITENUM_{}", model.identifier().name().to_uppercase()), tokens.span());
+        &format!("{}{}", MODEL_PREFIX, model.identifier().name().to_uppercase()), tokens.span());
 
     let bytes = &bincode::serialize(&model).unwrap();
     let bytes_len = bytes.len();
