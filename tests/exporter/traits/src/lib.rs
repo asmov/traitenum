@@ -3,6 +3,7 @@ use traitenum;
 #[traitenum::enumtrait(crate::SimpleTrait)]
 pub trait SimpleTrait {
     fn name(&self) -> &'static str;
+    fn column(&self) -> usize;
 }
 
 #[cfg(test)]

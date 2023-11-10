@@ -3,9 +3,11 @@ use traitenum_test_exporter_traits::SimpleTrait;
 
 #[derive(traitmacro::SimpleTraitEnum)]
 pub enum ImporterEnum {
-    #[traitenum(name("alpha"))]
+    #[traitenum(name("alpha"), column(0))]
     Alpha,
+    #[traitenum(column(2))]
     Bravo,
+    #[traitenum(column(4))]
     Charlie
 }
 

@@ -132,7 +132,7 @@ pub struct Method {
 
 impl Method {
     pub fn name(&self) -> &str { &self.name }
-    pub fn return_type(&self) -> &ReturnType { &self.return_type }
+    pub fn return_type(&self) -> ReturnType { self.return_type }
     pub fn attribute_definition(&self) -> &AttributeDefinition { &self.attribute_definition }
 
     pub fn new(name: String, return_type: ReturnType, attribute_definition: AttributeDefinition) -> Self {

@@ -1,6 +1,6 @@
 use quote::{self, ToTokens};
 use syn::spanned::Spanned;
-use syn;
+use syn::{self, Token};
 use proc_macro2;
 use bincode;
 
@@ -114,7 +114,7 @@ fn parse_enumtrait(attr: proc_macro2::TokenStream, item: proc_macro2::TokenStrea
                 });
 
                 if attrib.is_some() {
-                    synerr!(span, "Wrong attribute helper was used for trait: `#{}`. Please use for `#{}` traits.",
+                    synerr!(span, "Wrong attribute helper was used for trait: `#[{}]`. Please use for `#[{}]` traits.",
                         ENUM_ATTRIBUTE_HELPER_NAME, TRAIT_ATTRIBUTE_HELPER_NAME);
                 }
 
@@ -177,63 +177,6 @@ fn parse_enumtrait(attr: proc_macro2::TokenStream, item: proc_macro2::TokenStrea
     })
 }
 
-#[cfg(test)]
-mod tests {
-    use quote;
-
-    #[test]
-    fn test_sample_model() {
-        let attribute_src = quote::quote!{
-            crate::tests::MyTrait
-        };
-
-        let item_src = quote::quote!{
-            pub trait MyTrait {
-                // test default parsing
-                fn name(&self) -> &'static str;
-                #[traitenum::Str(default(":)"))]
-                fn emote(&self) -> &'static str;
-                // test ordinal
-                #[traitenum::Num(default(44))]
-                fn column(&self) -> usize;
-                // test default implementation
-                fn something_default(&self) {
-                    todo!("done");
-                }
-            }
-        };
-        
-        let model = super::parse_enumtrait(attribute_src, item_src).unwrap().model;
-
-        assert_eq!(vec!["crate", "tests"], model.identifier().path());
-        assert_eq!("MyTrait", model.identifier().name());
-
-        dbg!(&model);
-    }
-
-    #[test]
-    fn test_sample_model_errors() {
-        let _simple_attribute_src = quote::quote!{
-            crate::tests::MyTrait
-        };
-        let simple_item_src = quote::quote!{
-            pub trait MyTrait {
-                fn name(&self) -> &'static str;
-            }
-        };
-
-        // test error: empty identifier
-        let attribute_src = quote::quote!{};
-        assert!(super::parse_enumtrait(attribute_src, simple_item_src.clone()).is_err(),
-            "Empty #enumtrait(<pathspec>) should throw an Error");
-        
-        // test error: mismatched trait name with identifier
-        let attribute_src = quote::quote!{ crate::tests::TheirTrait };
-        assert!(super::parse_enumtrait(attribute_src, simple_item_src.clone()).is_err(),
-            "Mismatched trait name and #enumtrait(<pathspec>) identifier should throw an Error");
-    }
-}
-
 pub fn traitenum_macro(attr: proc_macro2::TokenStream, item: proc_macro2::TokenStream)
         -> Result<proc_macro2::TokenStream, syn::Error> {
     let EnumTraitMacroOutput {tokens, model} = parse_enumtrait(attr, item)?;
@@ -253,27 +196,125 @@ pub fn traitenum_macro(attr: proc_macro2::TokenStream, item: proc_macro2::TokenS
     Ok(output)
 }
 
-pub fn parse_derive_traitenum(
+pub fn derive_traitenum_macro(
         item: proc_macro2::TokenStream,
         model_bytes: &'static [u8]) -> Result<proc_macro2::TokenStream, syn::Error> {
     let model = model::EnumTrait::from(model_bytes);
 
     let item: syn::DeriveInput = syn::parse2(item)?;
+    let span = item.span();
+    let data_enum: &syn::DataEnum = match item.data {
+        syn::Data::Enum(ref data_enum) => data_enum,
+        _ => synerr!(span, "Only enums are supported for #[{}]", ENUM_ATTRIBUTE_HELPER_NAME)
+    };
 
     let trait_ident = syn::Ident::new(model.identifier().name(), item.span());
     let item_ident = &item.ident;
 
-    let output = quote::quote!{
-        impl #trait_ident for #item_ident {
-            fn name(&self) -> &'static str {
+    let method_outputs = model.methods().iter().map(|method| {
+        let func: syn::Ident = syn::Ident::new(method.name(), span);
+        let return_sig = match method.return_type() {
+            model::ReturnType::StaticStr => quote::quote!{ &'static str },
+            model::ReturnType::UnsignedSize => quote::quote!{ usize },
+            model::ReturnType::UnsignedInteger64 => quote::quote!{ u64 },
+            model::ReturnType::Integer64 => quote::quote!{ i64 },
+            model::ReturnType::Float64 => quote::quote!{ f64 },
+            model::ReturnType::UnsignedInteger32 => quote::quote!{ u32 },
+            model::ReturnType::Integer32 => quote::quote!{ i32 },
+            model::ReturnType::Float32 => quote::quote!{ f32 },
+            model::ReturnType::Byte => quote::quote!{ u8 },
+            model::ReturnType::Type => todo!("return sig: type"),
+            model::ReturnType::TypeReference => todo!("return sig type reference"),
+        };
+
+        let variant_outputs = data_enum.variants.iter().map(|variant| {
+            let variant_ident = &variant.ident;
+
+            quote::quote!{
+                Self::#variant_ident => todo!(),
+            }
+        });
+
+        let output = quote::quote!{
+            fn #func(&self) -> #return_sig {
                 match self {
-                    Self::Alpha => "alpha",
-                    Self::Bravo => "bravo",
-                    Self::Charlie => "charlie",
+                    #(#variant_outputs)*
                 }
             }
+        };
+        
+        output
+    });
+
+    let output = quote::quote!{
+        impl #trait_ident for #item_ident {
+            #(#method_outputs)*
         }
     };
 
     Ok(output)
+}
+
+#[cfg(test)]
+mod tests {
+    use quote;
+
+    use crate::TRAIT_ATTRIBUTE_HELPER_NAME;
+
+    #[test]
+    fn test_parse_enumtrait() {
+        let attribute_src = quote::quote!{
+            crate::tests::MyTrait
+        };
+
+        let item_src = quote::quote!{
+            pub trait MyTrait {
+                // test default parsing
+                fn name(&self) -> &'static str;
+                #[enumtrait::Str(default(":)"))]
+                fn emote(&self) -> &'static str;
+                // test ordinal
+                #[enumtrait::Num(default(44))]
+                fn column(&self) -> usize;
+                // test default implementation
+                fn something_default(&self) {
+                    todo!("done");
+                }
+            }
+        };
+        
+        let model = super::parse_enumtrait(attribute_src, item_src).unwrap().model;
+
+        assert_eq!(vec!["crate", "tests"], model.identifier().path());
+        assert_eq!("MyTrait", model.identifier().name());
+
+        dbg!(&model);
+    }
+
+    #[test]
+    fn test_parse_enumtrait_errors() {
+        let _simple_attribute_src = quote::quote!{
+            crate::tests::MyTrait
+        };
+        let simple_item_src = quote::quote!{
+            pub trait MyTrait {
+                fn name(&self) -> &'static str;
+            }
+        };
+
+        // test error: empty identifier
+        let attribute_src = quote::quote!{};
+        assert!(super::parse_enumtrait(attribute_src, simple_item_src.clone()).is_err(),
+            "Empty #[{}(<pathspec>)] should throw an Error", TRAIT_ATTRIBUTE_HELPER_NAME);
+        
+        // test error: mismatched trait name with identifier
+        let attribute_src = quote::quote!{ crate::tests::TheirTrait };
+        assert!(super::parse_enumtrait(attribute_src, simple_item_src.clone()).is_err(),
+            "Mismatched trait name and #[{}(<pathspec>)] identifier should throw an Error", TRAIT_ATTRIBUTE_HELPER_NAME);
+    }
+
+    #[test]
+    fn test_traitenum_macro() {
+
+    }
 }
