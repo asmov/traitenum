@@ -3,7 +3,8 @@ pub mod model;
 pub mod parse;
 pub mod macros;
 
-pub(crate) const ATTRIBUTE_HELPER_NAME: &'static str = "traitenum";
+pub(crate) const TRAIT_ATTRIBUTE_HELPER_NAME: &'static str = "enumtrait";
+pub(crate) const ENUM_ATTRIBUTE_HELPER_NAME: &'static str = "traitenum";
 
 //Define an error prefix to use this. E.g., const ERROR_PREFIX: &'static str = "traitenum: ";
 #[macro_export]

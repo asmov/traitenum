@@ -3,16 +3,16 @@
 
 #[cfg(test)]
 mod tests { 
-    use traitenum;
+    use traitenum::enumtrait;
     
     #[test]
     fn attribute_model() {
-        #[traitenum::enumtrait(crate::tests::MyTrait)]
+        #[enumtrait(crate::tests::MyTrait)]
         pub trait MyTrait {
             // test default parsing
             fn name(&self) -> &'static str;
             // test ordinal
-            #[traitenum::Num(default(42))]
+            #[enumtrait::Num(default(42))]
             fn column(&self) -> usize;
             // test default implementation
             fn something_default(&self) {

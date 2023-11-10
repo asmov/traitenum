@@ -4,7 +4,7 @@ use quote::ToTokens;
 use syn::{self, parse};
 
 use crate::model;
-use crate::{synerr, mksynerr, ATTRIBUTE_HELPER_NAME};
+use crate::{synerr, mksynerr, TRAIT_ATTRIBUTE_HELPER_NAME};
 
 const ERROR_PREFIX: &'static str = "traitenum: ";
 
@@ -62,14 +62,14 @@ pub(crate) fn parse_attribute(
         return_type: model::ReturnType) -> Result<model::AttributeDefinition, syn::Error> {
     if attr.path().segments.len() != 2 {
         synerr!(span, "Unable to parse helper attribute: `{}`. Format: {}::DefinitionName",
-            ATTRIBUTE_HELPER_NAME,
+            TRAIT_ATTRIBUTE_HELPER_NAME,
             attr.path().to_token_stream().to_string())
     }
 
     let attribute_def_name = attr.path().segments.last()
         .ok_or(mksynerr!(span,
             "Empty helper attribute definition name. Format: {}::DefinitionName",
-            ATTRIBUTE_HELPER_NAME))?.ident.to_string();
+            TRAIT_ATTRIBUTE_HELPER_NAME))?.ident.to_string();
 
     let mut def = model::AttributeDefinition::from(return_type);
     attr.parse_nested_meta(|meta| {

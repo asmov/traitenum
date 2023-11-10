@@ -4,9 +4,9 @@ use syn;
 use proc_macro2;
 use bincode;
 
-use crate::model;
+use crate::{model, ENUM_ATTRIBUTE_HELPER_NAME};
 use crate::parse::{self, ParseAttribute};
-use crate::{synerr, mksynerr, ATTRIBUTE_HELPER_NAME};
+use crate::{synerr, mksynerr, TRAIT_ATTRIBUTE_HELPER_NAME};
 
 const ERROR_PREFIX: &'static str = "traitenum: ";
 const MODEL_PREFIX: &'static str = "TRAITENUM_";
@@ -46,12 +46,11 @@ fn parse_enumtrait(attr: proc_macro2::TokenStream, item: proc_macro2::TokenStrea
             "Trait name does not match #enumtrait(<absolute trait path>): {}", identifier.name());
     }
 
-    //dbg!(&item.ident);
-    //item.items.iter().for_each(|a| { dbg!(proc_macro::TokenStream::from(a.to_token_stream())); } );
-
     let mut methods: Vec<model::Method> = Vec::new(); 
 
     for trait_item in &item.items {
+        let span = trait_item.span();
+
         match trait_item {
             syn::TraitItem::Fn(func) => {
                 // ignore functions with default implementations
@@ -63,13 +62,12 @@ fn parse_enumtrait(attr: proc_macro2::TokenStream, item: proc_macro2::TokenStrea
                 let mut return_type: Option<model::ReturnType> = None;
 
                 match &func.sig.output {
-                    syn::ReturnType::Default => synerr!(trait_item.span(),
-                        "Default return types () are not supported"),
+                    syn::ReturnType::Default => synerr!(span, "Default return types () are not supported"),
                     syn::ReturnType::Type(_, ref returntype) => match **returntype {
                         syn::Type::Path(ref path_type) => {
                             return_type = match model::ReturnType::try_from(&path_type.path) {
                                 Ok(v) => Some(v),
-                                Err(e) => synerr!(trait_item.span(), e)
+                                Err(e) => synerr!(span, e)
                             };
                         },
                         syn::Type::Reference(ref ref_type) => {
@@ -79,8 +77,7 @@ fn parse_enumtrait(attr: proc_macro2::TokenStream, item: proc_macro2::TokenStrea
                                     if "static" == lifetime.ident.to_string() {
                                         true
                                     } else {
-                                        synerr!(trait_item.span(),
-                                            "Only elided and static lifetimes are supported for return types")
+                                        synerr!(span, "Only elided and static lifetimes are supported for return types")
                                     }
                                 },
                                 None => false
@@ -88,7 +85,7 @@ fn parse_enumtrait(attr: proc_macro2::TokenStream, item: proc_macro2::TokenStrea
 
                             // mutability isn not supported
                             if ref_type.mutability.is_some() {
-                                synerr!(trait_item.span(), "Mutable return types are not supported")
+                                synerr!(span, "Mutable return types are not supported")
                             }
 
                             match *ref_type.elem {
@@ -103,7 +100,7 @@ fn parse_enumtrait(attr: proc_macro2::TokenStream, item: proc_macro2::TokenStrea
                                         todo!("lookup the return reference type");
                                     }
                                 },
-                                _ => synerr!(trait_item.span(),
+                                _ => synerr!(span,
                                     "Unsupported return reference type: {}", ref_type.to_token_stream().to_string())
                             }
                         },
@@ -111,11 +108,21 @@ fn parse_enumtrait(attr: proc_macro2::TokenStream, item: proc_macro2::TokenStrea
                     },
                 }
 
+                // throw an error if the the wrong helper (enum vs trait) was used
+                let attrib = func.attrs.iter().find(|attrib| {
+                    attrib.path().segments.first().is_some_and(|s| ENUM_ATTRIBUTE_HELPER_NAME == s.ident.to_string())
+                });
+
+                if attrib.is_some() {
+                    synerr!(span, "Wrong attribute helper was used for trait: `#{}`. Please use for `#{}` traits.",
+                        ENUM_ATTRIBUTE_HELPER_NAME, TRAIT_ATTRIBUTE_HELPER_NAME);
+                }
+
                 let return_type = return_type.ok_or(mksynerr!(trait_item.span(), "Uable to parse return type!!"))?;
 
                 // expected: traitenum::<AttributeDefinition>. we match against the 'traitenum' segment to get started.
                 let attrib = func.attrs.iter().find(|attrib| {
-                    attrib.path().segments.first().is_some_and(|s| ATTRIBUTE_HELPER_NAME == s.ident.to_string())
+                    attrib.path().segments.first().is_some_and(|s| TRAIT_ATTRIBUTE_HELPER_NAME == s.ident.to_string())
                 });
 
                 let attribute_def = if let Some(attrib) = attrib {
@@ -138,13 +145,13 @@ fn parse_enumtrait(attr: proc_macro2::TokenStream, item: proc_macro2::TokenStrea
         }
     }
 
-    // strip out all #traitenum helper attributes
+    // strip out all #enumtrait helper attributes
     for trait_item in &mut item.items {
         match trait_item {
             syn::TraitItem::Fn(func) => {
                 let mut count = 0;  
                 func.attrs.retain(|attrib| {
-                    if attrib.path().segments.first() .is_some_and(|s| ATTRIBUTE_HELPER_NAME == s.ident.to_string()) {
+                    if attrib.path().segments.first() .is_some_and(|s| TRAIT_ATTRIBUTE_HELPER_NAME == s.ident.to_string()) {
                         count += 1;
                         false
                     } else {
@@ -161,6 +168,8 @@ fn parse_enumtrait(attr: proc_macro2::TokenStream, item: proc_macro2::TokenStrea
             _ => ()
         }
     }
+
+    // throw an error if the user uses "traitenum" instead of enumtrait
 
     Ok(EnumTraitMacroOutput {
         tokens: item.to_token_stream(),
@@ -223,4 +232,48 @@ mod tests {
         assert!(super::parse_enumtrait(attribute_src, simple_item_src.clone()).is_err(),
             "Mismatched trait name and #enumtrait(<pathspec>) identifier should throw an Error");
     }
+}
+
+pub fn traitenum_macro(attr: proc_macro2::TokenStream, item: proc_macro2::TokenStream)
+        -> Result<proc_macro2::TokenStream, syn::Error> {
+    let EnumTraitMacroOutput {tokens, model} = parse_enumtrait(attr, item)?;
+    let model_name = syn::Ident::new(
+        &format!("{}{}", MODEL_PREFIX, model.identifier().name().to_uppercase()), tokens.span());
+
+    let bytes = &bincode::serialize(&model).unwrap();
+    let bytes_len = bytes.len();
+    let bytes_literal = syn::LitByteStr::new(bytes, tokens.span());
+
+    let output = quote::quote!{
+        pub const #model_name: &'static [u8; #bytes_len] = #bytes_literal;
+
+        #tokens
+    };
+
+    Ok(output)
+}
+
+pub fn parse_derive_traitenum(
+        item: proc_macro2::TokenStream,
+        model_bytes: &'static [u8]) -> Result<proc_macro2::TokenStream, syn::Error> {
+    let model = model::EnumTrait::from(model_bytes);
+
+    let item: syn::DeriveInput = syn::parse2(item)?;
+
+    let trait_ident = syn::Ident::new(model.identifier().name(), item.span());
+    let item_ident = &item.ident;
+
+    let output = quote::quote!{
+        impl #trait_ident for #item_ident {
+            fn name(&self) -> &'static str {
+                match self {
+                    Self::Alpha => "alpha",
+                    Self::Bravo => "bravo",
+                    Self::Charlie => "charlie",
+                }
+            }
+        }
+    };
+
+    Ok(output)
 }
