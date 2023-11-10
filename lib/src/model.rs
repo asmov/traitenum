@@ -145,7 +145,7 @@ impl Method {
 }
 
 #[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize)]
-pub struct Attribute {
+pub struct AttributeValue {
     name: String,
     value: Value
 }

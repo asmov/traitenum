@@ -1,12 +1,9 @@
 use quote::{self, ToTokens};
-use syn::spanned::Spanned;
-use syn::{self, Token};
+use syn::{self, spanned::Spanned};
 use proc_macro2;
 use bincode;
 
-use crate::{model, ENUM_ATTRIBUTE_HELPER_NAME};
-use crate::parse::{self, ParseAttribute};
-use crate::{synerr, mksynerr, TRAIT_ATTRIBUTE_HELPER_NAME};
+use crate::{model, parse, synerr, mksynerr, TRAIT_ATTRIBUTE_HELPER_NAME, ENUM_ATTRIBUTE_HELPER_NAME};
 
 const ERROR_PREFIX: &'static str = "traitenum: ";
 const MODEL_PREFIX: &'static str = "TRAITENUM_";
@@ -211,22 +208,19 @@ pub fn derive_traitenum_macro(
     let trait_ident = syn::Ident::new(model.identifier().name(), item.span());
     let item_ident = &item.ident;
 
+    let attribute_vals: Vec<model::AttributeValue> = Vec::new();
+
+    for variant in &data_enum.variants {
+        let span = variant.span();
+        //let variant_ident = variant.ident;
+        //let attr = variant.attrs.iter().find(|a| );
+        //let mut attribute_val = model::Attri
+        todo!()
+    }
+
     let method_outputs = model.methods().iter().map(|method| {
         let func: syn::Ident = syn::Ident::new(method.name(), span);
-        let return_sig = match method.return_type() {
-            model::ReturnType::StaticStr => quote::quote!{ &'static str },
-            model::ReturnType::UnsignedSize => quote::quote!{ usize },
-            model::ReturnType::UnsignedInteger64 => quote::quote!{ u64 },
-            model::ReturnType::Integer64 => quote::quote!{ i64 },
-            model::ReturnType::Float64 => quote::quote!{ f64 },
-            model::ReturnType::UnsignedInteger32 => quote::quote!{ u32 },
-            model::ReturnType::Integer32 => quote::quote!{ i32 },
-            model::ReturnType::Float32 => quote::quote!{ f32 },
-            model::ReturnType::Byte => quote::quote!{ u8 },
-            model::ReturnType::Type => todo!("return sig: type"),
-            model::ReturnType::TypeReference => todo!("return sig type reference"),
-        };
-
+        let return_sig = derive_return_type(method);
         let variant_outputs = data_enum.variants.iter().map(|variant| {
             let variant_ident = &variant.ident;
 
@@ -253,6 +247,24 @@ pub fn derive_traitenum_macro(
     };
 
     Ok(output)
+}
+
+fn derive_return_type(method: &model::Method) -> proc_macro2::TokenStream {
+    let output = match method.return_type() {
+        model::ReturnType::StaticStr => quote::quote!{ &'static str },
+        model::ReturnType::UnsignedSize => quote::quote!{ usize },
+        model::ReturnType::UnsignedInteger64 => quote::quote!{ u64 },
+        model::ReturnType::Integer64 => quote::quote!{ i64 },
+        model::ReturnType::Float64 => quote::quote!{ f64 },
+        model::ReturnType::UnsignedInteger32 => quote::quote!{ u32 },
+        model::ReturnType::Integer32 => quote::quote!{ i32 },
+        model::ReturnType::Float32 => quote::quote!{ f32 },
+        model::ReturnType::Byte => quote::quote!{ u8 },
+        model::ReturnType::Type => todo!("return sig: type"),
+        model::ReturnType::TypeReference => todo!("return sig type reference"),
+    };
+
+    output
 }
 
 #[cfg(test)]
