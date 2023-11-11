@@ -7,7 +7,7 @@ pub enum ImporterEnum {
     Alpha,
     #[traitenum(column(2))]
     Bravo,
-    #[traitenum(column(4))]
+    #[traitenum(name("charles"), column(4))]
     Charlie
 }
 

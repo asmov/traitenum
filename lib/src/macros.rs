@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use quote::{self, ToTokens};
 use syn::{self, spanned::Spanned};
 use proc_macro2;
@@ -208,24 +210,52 @@ pub fn derive_traitenum_macro(
     let trait_ident = syn::Ident::new(model.identifier().name(), item.span());
     let item_ident = &item.ident;
 
-    let attribute_vals: Vec<model::AttributeValue> = Vec::new();
+    // variant name -> HashMap<method name -> attribute value>
+    let mut variant_attribute_val_map: HashMap<String, HashMap<String, model::AttributeValue>> = HashMap::new();
 
+    // parse enum attribute values, if provided
     for variant in &data_enum.variants {
-        let span = variant.span();
-        //let variant_ident = variant.ident;
-        //let attr = variant.attrs.iter().find(|a| );
-        //let mut attribute_val = model::Attri
-        todo!()
+        let variant_name = variant.ident.to_string();
+        // find the #[traitenum] attribute or continue
+        let attribute = variant.attrs.iter()
+            .find(|a| a.path().segments.first()
+                .is_some_and(|s| ENUM_ATTRIBUTE_HELPER_NAME == s.ident.to_string()));
+        let attribute = match attribute {
+            Some(a) => a,
+            None => continue
+        };
+
+        let mut attribute_val_map: HashMap<String, model::AttributeValue> = parse_attribute_values(attribute, &model)?;
+
+        // set attribute value defaults. throw errors where values are required, but not provided
+        for method in model.methods() {
+            let method_name = method.name();
+            if attribute_val_map.contains_key(method_name) {
+                continue;
+            } else if !method.attribute_definition().has_default() {
+                synerr!(span, "No attribute value set for attribute `{}`: {}", method_name, variant_name);
+            } else {
+                let value = method.attribute_definition().default().unwrap();
+                attribute_val_map.insert(method_name.to_string(), model::AttributeValue::new(value));
+
+            }
+        }
+
+        variant_attribute_val_map.insert(variant_name, attribute_val_map);
     }
 
+
     let method_outputs = model.methods().iter().map(|method| {
-        let func: syn::Ident = syn::Ident::new(method.name(), span);
-        let return_sig = derive_return_type(method);
+        let method_name = method.name();
+        let func: syn::Ident = syn::Ident::new(method_name, span);
+        let return_sig = tokenize_return_type(method);
         let variant_outputs = data_enum.variants.iter().map(|variant| {
             let variant_ident = &variant.ident;
+            let value = variant_attribute_val_map.get(&variant_ident.to_string()).unwrap().get(method_name).unwrap();
+            let value = tokenize_value(value);
 
             quote::quote!{
-                Self::#variant_ident => todo!(),
+                Self::#variant_ident => #value,
             }
         });
 
@@ -236,7 +266,7 @@ pub fn derive_traitenum_macro(
                 }
             }
         };
-        
+
         output
     });
 
@@ -249,7 +279,74 @@ pub fn derive_traitenum_macro(
     Ok(output)
 }
 
-fn derive_return_type(method: &model::Method) -> proc_macro2::TokenStream {
+fn parse_attribute_values(attr: &syn::Attribute, model: &model::EnumTrait)
+        -> Result<HashMap<String, model::AttributeValue>, syn::Error> {
+    let mut value_map: HashMap<String, model::AttributeValue> = HashMap::new();
+
+    attr.parse_nested_meta(|meta| {
+        let attr_name = meta.path.get_ident()
+            .ok_or(mksynerr!(attr.span(), "Invalid enum attribute: `{}`",
+                meta.path.to_token_stream().to_string()))?
+            .to_string();
+
+        if value_map.contains_key(&attr_name) {
+            synerr!(attr.span(), "Duplicate enum attribute value for: {}", attr_name);
+        }
+
+        let method = model.methods().iter().find(|m| m.name() == attr_name)
+            .ok_or(mksynerr!(attr.span(), "Unknown enum attribute: {}", attr_name))?;
+
+        let attribute_def = &method.attribute_definition();
+
+        let content;
+        syn::parenthesized!(content in meta.input);
+
+        let value = match attribute_def {
+            model::AttributeDefinition::StaticStr(strdef) => model::Value::StaticStr(
+                content.parse::<syn::LitStr>()?.value()),
+            model::AttributeDefinition::UnsignedSize(numdef) => model::Value::UnsignedSize(
+                content.parse::<syn::LitInt>()?.base10_parse()?),
+            model::AttributeDefinition::UnsignedInteger64(numdef) => todo!(),
+            model::AttributeDefinition::Integer64(numdef) => todo!(),
+            model::AttributeDefinition::Float64(numdef) => todo!(),
+            model::AttributeDefinition::UnsignedInteger32(numdef) => todo!(),
+            model::AttributeDefinition::Integer32(numdef) => todo!(),
+            model::AttributeDefinition::Float32(numdef) => todo!(),
+            model::AttributeDefinition::Byte(numdef) => todo!(),
+            model::AttributeDefinition::Type(typedef) => todo!(),
+            model::AttributeDefinition::Relation(reldef) => todo!(),
+        };
+
+        let attribute_value = model::AttributeValue::new(value);
+        value_map.insert(attr_name, attribute_value);
+
+        Ok(())
+    })?;
+ 
+    Ok(value_map)
+}
+
+fn tokenize_value(value: &model::AttributeValue) -> proc_macro2::TokenStream {
+    match value.value() {
+        model::Value::StaticStr(s) => quote::quote!(#s),
+        model::Value::UnsignedSize(n) => quote::quote!(#n),
+        model::Value::UnsignedInteger64(n) => quote::quote!(#n),
+        model::Value::Integer64(n) => quote::quote!(#n),
+        model::Value::Float64(n) => quote::quote!(#n),
+        model::Value::UnsignedInteger32(n) => quote::quote!(#n),
+        model::Value::Integer32(n) => quote::quote!(#n),
+        model::Value::Float32(n) => quote::quote!(#n),
+        model::Value::Byte(n) => quote::quote!(#n),
+        model::Value::Type(id) => tokenize_identifier(id),
+        model::Value::Relation(id) => tokenize_identifier(id),
+    }
+}
+
+fn tokenize_identifier(_identifier: &model::Identifier) -> proc_macro2::TokenStream {
+    todo!()
+}
+
+fn tokenize_return_type(method: &model::Method) -> proc_macro2::TokenStream {
     let output = match method.return_type() {
         model::ReturnType::StaticStr => quote::quote!{ &'static str },
         model::ReturnType::UnsignedSize => quote::quote!{ usize },

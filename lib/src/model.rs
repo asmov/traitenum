@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use serde;
 
 #[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -18,7 +20,7 @@ impl EnumTrait {
     }
 }
 
-#[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Identifier{
     path: Vec<String>,
     name: String
@@ -33,6 +35,12 @@ impl Identifier {
             path,
             name
         }
+    }
+}
+
+impl Display for Identifier {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}{}", self.path.join("::"), self.name)
     }
 }
 
@@ -67,18 +75,83 @@ pub enum AttributeDefinition {
     Relation(RelationAttributeDefinition)
 }
 
+impl AttributeDefinition {
+    pub fn has_default(&self) -> bool {
+        match self {
+            AttributeDefinition::StaticStr(strdef) => strdef.default.is_some(),
+            AttributeDefinition::UnsignedSize(numdef) => numdef.default.is_some(),
+            AttributeDefinition::UnsignedInteger64(numdef) => numdef.default.is_some(),
+            AttributeDefinition::Integer64(numdef) => numdef.default.is_some(),
+            AttributeDefinition::Float64(numdef) => numdef.default.is_some(),
+            AttributeDefinition::UnsignedInteger32(numdef) => numdef.default.is_some(),
+            AttributeDefinition::Integer32(numdef) => numdef.default.is_some(),
+            AttributeDefinition::Float32(numdef) => numdef.default.is_some(),
+            AttributeDefinition::Byte(numdef) => numdef.default.is_some(),
+            AttributeDefinition::Type(typedef) => typedef.default.is_some(),
+            AttributeDefinition::Relation(_reldef) => false,
+        }
+    }
+
+    pub fn default(&self) -> Option<Value> {
+        match self {
+            AttributeDefinition::StaticStr(ref strdef) => match &strdef.default {
+                Some(s) => Some(Value::StaticStr(s.to_string())),
+                None => None
+            },
+            AttributeDefinition::UnsignedSize(ref numdef) => match &numdef.default {
+                Some(n) => Some(Value::UnsignedSize(*n)),
+                None => None
+            },
+            AttributeDefinition::UnsignedInteger64(ref numdef) => match &numdef.default {
+                Some(n) => Some(Value::UnsignedInteger64(*n)),
+                None => None
+            },
+            AttributeDefinition::Integer64(ref numdef) => match &numdef.default {
+                Some(n) => Some(Value::Integer64(*n)),
+                None => None
+            },
+            AttributeDefinition::Float64(ref numdef) => match &numdef.default {
+                Some(n) => Some(Value::Float64(*n)),
+                None => None
+            },
+            AttributeDefinition::UnsignedInteger32(ref numdef) => match &numdef.default {
+                Some(n) => Some(Value::UnsignedInteger32(*n)),
+                None => None
+            },
+            AttributeDefinition::Integer32(ref numdef) => match &numdef.default {
+                Some(n) => Some(Value::Integer32(*n)),
+                None => None
+            },
+            AttributeDefinition::Float32(ref numdef) => match &numdef.default {
+                Some(n) => Some(Value::Float32(*n)),
+                None => None
+            },
+            AttributeDefinition::Byte(ref numdef) => match &numdef.default {
+                Some(n) => Some(Value::Byte(*n)),
+                None => None
+            },
+            AttributeDefinition::Type(ref typedef) => match &typedef.default {
+                Some(id) => Some(Value::Type(id.clone())),
+                None => None
+            },
+            AttributeDefinition::Relation(_reldef) => None,
+        }
+    }
+
+}
+
 impl From<ReturnType> for AttributeDefinition {
     fn from(return_type: ReturnType) -> Self {
         match return_type {
-            ReturnType::StaticStr => AttributeDefinition::StaticStr(StaticStrAttributeDefinition { default: None, format: None }),
-            ReturnType::UnsignedSize => AttributeDefinition::UnsignedSize(NumberAttributeDefinition { default: Some(0), start: None, increment: None }),
-            ReturnType::UnsignedInteger64 => todo!(),
-            ReturnType::Integer64 => todo!(),
-            ReturnType::Float64 => todo!(),
-            ReturnType::UnsignedInteger32 => todo!(),
-            ReturnType::Integer32 => todo!(),
-            ReturnType::Float32 => todo!(),
-            ReturnType::Byte => todo!(),
+            ReturnType::StaticStr => AttributeDefinition::StaticStr(StaticStrAttributeDefinition { default: None, preset: None }),
+            ReturnType::UnsignedSize => AttributeDefinition::UnsignedSize(NumberAttributeDefinition { default: Some(0), preset: None, increment: None }),
+            ReturnType::UnsignedInteger64 => AttributeDefinition::UnsignedInteger64(NumberAttributeDefinition { default: Some(0), preset: None, increment: None }),
+            ReturnType::Integer64 => AttributeDefinition::Integer64(NumberAttributeDefinition { default: Some(0), preset: None, increment: None }),
+            ReturnType::Float64 => AttributeDefinition::Float64(NumberAttributeDefinition { default: Some(0.0), preset: None, increment: None }),
+            ReturnType::UnsignedInteger32 => AttributeDefinition::UnsignedInteger32(NumberAttributeDefinition { default: Some(0), preset: None, increment: None }),
+            ReturnType::Integer32 => AttributeDefinition::Integer32(NumberAttributeDefinition { default: Some(0), preset: None, increment: None }),
+            ReturnType::Float32 => AttributeDefinition::Float32(NumberAttributeDefinition { default: Some(0.0), preset: None, increment: None }),
+            ReturnType::Byte => AttributeDefinition::Byte(NumberAttributeDefinition { default: Some(0), preset: None, increment: None }),
             ReturnType::Type => todo!(),
             ReturnType::TypeReference => todo!(),
         }
@@ -88,20 +161,29 @@ impl From<ReturnType> for AttributeDefinition {
 #[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct NumberAttributeDefinition<N> {
     pub(crate) default: Option<N>,
-    pub(crate) start: Option<N>,
+    pub(crate) preset: Option<NumberPreset>,
     pub(crate) increment: Option<N>,
 }
 
 #[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize)]
-pub struct StringFormat {
-    format_string: String,
-    arguments: Vec<String> //TODO: Vec<Method>?
+pub enum StringPreset {
+    Variant,
+    //Lower,
+    //Upper,
+    //Snake,
+    //Slug
+}
+
+#[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub enum NumberPreset {
+    Ordinal,
+    Increment,
 }
 
 #[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct StaticStrAttributeDefinition {
     pub(crate) default: Option<String>,
-    pub(crate) format: Option<StringFormat>
+    pub(crate) preset: Option<StringPreset>
 }
 
 #[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -146,8 +228,17 @@ impl Method {
 
 #[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct AttributeValue {
-    name: String,
     value: Value
+}
+
+impl AttributeValue {
+    pub fn value(&self) -> &Value { &self.value }
+
+    pub fn new(value: Value) -> Self {
+        Self {
+            value: value
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -159,6 +250,7 @@ pub enum Value {
     UnsignedInteger32(u32),
     Integer32(i32),
     Float32(f32),
+    UnsignedSize(usize),
     Byte(u8),
     Type(Identifier),
     Relation(Identifier)
