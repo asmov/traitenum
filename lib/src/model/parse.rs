@@ -23,18 +23,19 @@ impl parse::Parse for model::Identifier {
     }
 }
 
+impl From<&syn::Ident> for model::Identifier{
+    fn from(ident: &syn::Ident) -> Self {
+        model::Identifier::new(Vec::new(), ident.to_string())
+    }
+}
+
 impl TryFrom<&syn::Path> for model::ReturnType {
-    type Error = String;
+    type Error = ();
 
     fn try_from(path: &syn::Path) -> Result<Self, Self::Error> {
-        let ident = match path.get_ident() {
-            Some(v) => v.to_string(),
-            None => return Err(format!("Unsupported return type: {}", path.to_token_stream().to_string()))
-        };
-
-        match ident.as_str() {
-            "usize" => Ok(model::ReturnType::UnsignedSize),
-            _ => Err(format!("Unsupported return type: {}", path.to_token_stream().to_string()))
+        match path.get_ident() {
+            Some(v) => model::ReturnType::from_str(&v.to_string()),
+            None => Err(()) 
         }
     }
 }
@@ -119,6 +120,12 @@ fn parse_static_str_attribute_meta(
        "default" => {
             def.default = Some(content.parse::<syn::LitStr>()?.value())
        },
+       "preset" => {
+            let variant_name = content.parse::<syn::Ident>()?.to_string();
+            let preset = model::StringPreset::from_str(&variant_name)
+                .or(Err(mksynerr!(span, "Unknown String preset: {}", variant_name)))?;
+            def.preset = Some(preset);
+       },
        _ => synerr!(span, "Unknown attribute definition property: {}", name)
     }
 
@@ -134,7 +141,13 @@ fn parse_generic_number_attribute_meta( // item
 {
     match def {
         model::AttributeDefinition::UnsignedSize(def) => parse_number_attribute_meta(def, name, content, span, return_type),
-        _ => synerr!(span, "Unsupported def")
+        model::AttributeDefinition::UnsignedInteger64(def) => parse_number_attribute_meta(def, name, content, span, return_type),
+        model::AttributeDefinition::Integer64(def) => parse_number_attribute_meta(def, name, content, span, return_type),
+        model::AttributeDefinition::Float64(def) => parse_number_attribute_meta(def, name, content, span, return_type),
+        model::AttributeDefinition::UnsignedInteger32(def) => parse_number_attribute_meta(def, name, content, span, return_type),
+        model::AttributeDefinition::Integer32(def) => parse_number_attribute_meta(def, name, content, span, return_type),
+        model::AttributeDefinition::Float32(def) => parse_number_attribute_meta(def, name, content, span, return_type),
+         _ => synerr!(span, "Unsupported def")
     }
 }
  
@@ -157,25 +170,41 @@ where
         model::ReturnType::Integer32 => false,
         model::ReturnType::Float32 => true,
         model::ReturnType::Byte => false,
-        _ => synerr!(span, "Unexpected return type for number attribute: {:#?}", return_type)
+        model::ReturnType::Bool
+        | model::ReturnType::TypeReference
+        | model::ReturnType::Type
+        | model::ReturnType::StaticStr =>
+            synerr!(span, "Unexpected return type for number attribute: {:#?}", return_type)
     };
 
     macro_rules! parsenum {
         () => {
-            if is_float {
+           if is_float {
                 content.parse::<syn::LitFloat>()?.base10_parse()?
-            } else {
+           } else {
                 content.parse::<syn::LitInt>()?.base10_parse()?
-            }
+           } 
         };
     }
-    
-    //let x: N = content.parse::<syn::LitFloat>()?.base10_parse()?;
 
     match name {
        "default" => {
-            let x: N = parsenum!();
-            def.default = Some(x)
+            let n: N = parsenum!();
+            def.default = Some(n)
+       },
+       "preset" => {
+            let variant_name = content.parse::<syn::Ident>()?.to_string();
+            let preset = model::NumberPreset::from_str(&variant_name)
+                .or(Err(mksynerr!(span, "Unknown Number preset: {}", variant_name)))?;
+            def.preset = Some(preset);
+       },
+       "start" => {
+            let n: N = parsenum!();
+            def.start = Some(n)
+       },
+       "increment" => {
+            let n: N = parsenum!();
+            def.increment = Some(n)
        },
        _ => synerr!(span, "Unknown attribute definition property: {}", name)
     }

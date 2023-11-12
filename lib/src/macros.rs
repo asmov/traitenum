@@ -5,7 +5,7 @@ use syn::{self, spanned::Spanned};
 use proc_macro2;
 use bincode;
 
-use crate::{model, parse, synerr, mksynerr, TRAIT_ATTRIBUTE_HELPER_NAME, ENUM_ATTRIBUTE_HELPER_NAME};
+use crate::{model, model::parse, synerr, mksynerr, TRAIT_ATTRIBUTE_HELPER_NAME, ENUM_ATTRIBUTE_HELPER_NAME};
 
 const ERROR_PREFIX: &'static str = "traitenum: ";
 const MODEL_PREFIX: &'static str = "TRAITENUM_";
@@ -66,7 +66,8 @@ fn parse_enumtrait(attr: proc_macro2::TokenStream, item: proc_macro2::TokenStrea
                         syn::Type::Path(ref path_type) => {
                             return_type = match model::ReturnType::try_from(&path_type.path) {
                                 Ok(v) => Some(v),
-                                Err(e) => synerr!(span, e)
+                                Err(e) => synerr!(span, "Unsupported return type: {}",
+                                    &path_type.path.to_token_stream().to_string())
                             };
                         },
                         syn::Type::Reference(ref ref_type) => {
@@ -130,6 +131,11 @@ fn parse_enumtrait(attr: proc_macro2::TokenStream, item: proc_macro2::TokenStrea
                     model::AttributeDefinition::from(return_type)
                 };
 
+                // ensure that the attribute definition adheres to its own rules
+                if let Err(errmsg) = attribute_def.validate() {
+                    synerr!(span, errmsg);
+                }
+
                 let method = model::Method::new(method_name, return_type, attribute_def);
                 methods.push(method);
                 
@@ -176,28 +182,23 @@ fn parse_enumtrait(attr: proc_macro2::TokenStream, item: proc_macro2::TokenStrea
     })
 }
 
-pub fn traitenum_macro(attr: proc_macro2::TokenStream, item: proc_macro2::TokenStream)
-        -> Result<proc_macro2::TokenStream, syn::Error> {
-    let EnumTraitMacroOutput {tokens, model} = parse_enumtrait(attr, item)?;
-    let model_name = syn::Ident::new(
-        &format!("{}{}", MODEL_PREFIX, model.identifier().name().to_uppercase()), tokens.span());
-
-    let bytes = &bincode::serialize(&model).unwrap();
-    let bytes_len = bytes.len();
-    let bytes_literal = syn::LitByteStr::new(bytes, tokens.span());
-
-    let output = quote::quote!{
-        pub const #model_name: &'static [u8; #bytes_len] = #bytes_literal;
-
-        #tokens
-    };
-
-    Ok(output)
+#[derive(Debug)]
+pub struct TraitEnumMacroOutput {
+    tokens: proc_macro2::TokenStream,
+    model: model::TraitEnum
 }
 
-pub fn derive_traitenum_macro(
+
+pub fn traitenum_derive_macro(
         item: proc_macro2::TokenStream,
-        model_bytes: &'static [u8]) -> Result<proc_macro2::TokenStream, syn::Error> {
+        model_bytes: &[u8]) -> Result<proc_macro2::TokenStream, syn::Error> {
+    let output: TraitEnumMacroOutput = parse_traitenum(item, model_bytes)?;
+    Ok(output.tokens)
+}
+ 
+fn parse_traitenum(
+        item: proc_macro2::TokenStream,
+        model_bytes: &[u8]) -> Result<TraitEnumMacroOutput, syn::Error> {
     let model = model::EnumTrait::from(model_bytes);
 
     let item: syn::DeriveInput = syn::parse2(item)?;
@@ -210,57 +211,65 @@ pub fn derive_traitenum_macro(
     let trait_ident = syn::Ident::new(model.identifier().name(), item.span());
     let item_ident = &item.ident;
 
-    // variant name -> HashMap<method name -> attribute value>
-    let mut variant_attribute_val_map: HashMap<String, HashMap<String, model::AttributeValue>> = HashMap::new();
+    let mut trait_enum = model::TraitEnum::partial(model::Identifier::from(&item.ident));
 
     // parse enum attribute values, if provided
+    let mut ordinal: usize = 0;
     for variant in &data_enum.variants {
         let variant_name = variant.ident.to_string();
         // find the #[traitenum] attribute or continue
         let attribute = variant.attrs.iter()
             .find(|a| a.path().segments.first()
                 .is_some_and(|s| ENUM_ATTRIBUTE_HELPER_NAME == s.ident.to_string()));
-        let attribute = match attribute {
-            Some(a) => a,
-            None => continue
-        };
 
-        let mut attribute_val_map: HashMap<String, model::AttributeValue> = parse_attribute_values(attribute, &model)?;
+        let mut variant = if let Some(attribute) = attribute {
+            parse_variant(&variant_name, attribute, &model)?
+        } else {
+            model::Variant::partial(variant_name.to_owned())
+        };
 
         // set attribute value defaults. throw errors where values are required, but not provided
         for method in model.methods() {
             let method_name = method.name();
-            if attribute_val_map.contains_key(method_name) {
+            if variant.has(method_name) {
                 continue;
-            } else if !method.attribute_definition().has_default() {
-                synerr!(span, "No attribute value set for attribute `{}`: {}", method_name, variant_name);
+            } else if !method.attribute_definition().has_default_or_preset() {
+                synerr!(span, "Missing value for attribute `{}`: {}", method_name, variant_name);
             } else {
-                let value = method.attribute_definition().default().unwrap();
-                attribute_val_map.insert(method_name.to_string(), model::AttributeValue::new(value));
+                let value = method.attribute_definition().default_or_preset(&variant_name, ordinal).unwrap();
+                variant.set_value(method_name.to_string(), model::AttributeValue::new(value));
 
             }
         }
 
-        variant_attribute_val_map.insert(variant_name, attribute_val_map);
+        trait_enum.push_variant(variant);
+        ordinal += 1;
     }
 
 
+    // write a method for each one defined by the enum trait, which returns the value defined by each enum variant
     let method_outputs = model.methods().iter().map(|method| {
         let method_name = method.name();
         let func: syn::Ident = syn::Ident::new(method_name, span);
-        let return_sig = tokenize_return_type(method);
-        let variant_outputs = data_enum.variants.iter().map(|variant| {
-            let variant_ident = &variant.ident;
-            let value = variant_attribute_val_map.get(&variant_ident.to_string()).unwrap().get(method_name).unwrap();
-            let value = tokenize_value(value);
+        let return_type = method.return_type().to_token_stream();
+
+        // create the match{} body of the method, mapping variants to their return value
+        let variant_outputs = data_enum.variants.iter().map(|variant_data| {
+            let variant_ident = &variant_data.ident;
+            let variant_name = variant_ident.to_string();
+            let value = trait_enum
+                .variant(&variant_name).unwrap()
+                .value(method_name).unwrap()
+                .to_token_stream();
 
             quote::quote!{
                 Self::#variant_ident => #value,
             }
         });
 
+        // the final method signature and body
         let output = quote::quote!{
-            fn #func(&self) -> #return_sig {
+            fn #func(&self) -> #return_type {
                 match self {
                     #(#variant_outputs)*
                 }
@@ -276,20 +285,22 @@ pub fn derive_traitenum_macro(
         }
     };
 
-    Ok(output)
+    Ok(TraitEnumMacroOutput {
+        tokens: output,
+        model: trait_enum
+    })
 }
 
-fn parse_attribute_values(attr: &syn::Attribute, model: &model::EnumTrait)
-        -> Result<HashMap<String, model::AttributeValue>, syn::Error> {
-    let mut value_map: HashMap<String, model::AttributeValue> = HashMap::new();
-
+fn parse_variant(variant_name: &str, attr: &syn::Attribute, model: &model::EnumTrait)
+        -> Result<model::Variant, syn::Error> {
+    let mut variant = model::Variant::partial(variant_name.to_owned());
     attr.parse_nested_meta(|meta| {
         let attr_name = meta.path.get_ident()
             .ok_or(mksynerr!(attr.span(), "Invalid enum attribute: `{}`",
                 meta.path.to_token_stream().to_string()))?
             .to_string();
 
-        if value_map.contains_key(&attr_name) {
+        if variant.has(&attr_name) {
             synerr!(attr.span(), "Duplicate enum attribute value for: {}", attr_name);
         }
 
@@ -302,73 +313,37 @@ fn parse_attribute_values(attr: &syn::Attribute, model: &model::EnumTrait)
         syn::parenthesized!(content in meta.input);
 
         let value = match attribute_def {
-            model::AttributeDefinition::StaticStr(strdef) => model::Value::StaticStr(
+            model::AttributeDefinition::Bool(_) => model::Value::Bool(
+                content.parse::<syn::LitBool>()?.value()),
+            model::AttributeDefinition::StaticStr(_) => model::Value::StaticStr(
                 content.parse::<syn::LitStr>()?.value()),
-            model::AttributeDefinition::UnsignedSize(numdef) => model::Value::UnsignedSize(
+            model::AttributeDefinition::UnsignedSize(_) => model::Value::UnsignedSize(
                 content.parse::<syn::LitInt>()?.base10_parse()?),
-            model::AttributeDefinition::UnsignedInteger64(numdef) => todo!(),
-            model::AttributeDefinition::Integer64(numdef) => todo!(),
-            model::AttributeDefinition::Float64(numdef) => todo!(),
-            model::AttributeDefinition::UnsignedInteger32(numdef) => todo!(),
-            model::AttributeDefinition::Integer32(numdef) => todo!(),
-            model::AttributeDefinition::Float32(numdef) => todo!(),
-            model::AttributeDefinition::Byte(numdef) => todo!(),
-            model::AttributeDefinition::Type(typedef) => todo!(),
-            model::AttributeDefinition::Relation(reldef) => todo!(),
+            model::AttributeDefinition::UnsignedInteger64(_) => todo!(),
+            model::AttributeDefinition::Integer64(_) => todo!(),
+            model::AttributeDefinition::Float64(_) => todo!(),
+            model::AttributeDefinition::UnsignedInteger32(_) => todo!(),
+            model::AttributeDefinition::Integer32(_) => todo!(),
+            model::AttributeDefinition::Float32(_) => todo!(),
+            model::AttributeDefinition::Byte(_) => todo!(),
+            model::AttributeDefinition::Type(_) => todo!(),
+            model::AttributeDefinition::Relation(_) => todo!(),
         };
 
         let attribute_value = model::AttributeValue::new(value);
-        value_map.insert(attr_name, attribute_value);
+        variant.set_value(attr_name, attribute_value);
 
         Ok(())
     })?;
- 
-    Ok(value_map)
-}
 
-fn tokenize_value(value: &model::AttributeValue) -> proc_macro2::TokenStream {
-    match value.value() {
-        model::Value::StaticStr(s) => quote::quote!(#s),
-        model::Value::UnsignedSize(n) => quote::quote!(#n),
-        model::Value::UnsignedInteger64(n) => quote::quote!(#n),
-        model::Value::Integer64(n) => quote::quote!(#n),
-        model::Value::Float64(n) => quote::quote!(#n),
-        model::Value::UnsignedInteger32(n) => quote::quote!(#n),
-        model::Value::Integer32(n) => quote::quote!(#n),
-        model::Value::Float32(n) => quote::quote!(#n),
-        model::Value::Byte(n) => quote::quote!(#n),
-        model::Value::Type(id) => tokenize_identifier(id),
-        model::Value::Relation(id) => tokenize_identifier(id),
-    }
-}
-
-fn tokenize_identifier(_identifier: &model::Identifier) -> proc_macro2::TokenStream {
-    todo!()
-}
-
-fn tokenize_return_type(method: &model::Method) -> proc_macro2::TokenStream {
-    let output = match method.return_type() {
-        model::ReturnType::StaticStr => quote::quote!{ &'static str },
-        model::ReturnType::UnsignedSize => quote::quote!{ usize },
-        model::ReturnType::UnsignedInteger64 => quote::quote!{ u64 },
-        model::ReturnType::Integer64 => quote::quote!{ i64 },
-        model::ReturnType::Float64 => quote::quote!{ f64 },
-        model::ReturnType::UnsignedInteger32 => quote::quote!{ u32 },
-        model::ReturnType::Integer32 => quote::quote!{ i32 },
-        model::ReturnType::Float32 => quote::quote!{ f32 },
-        model::ReturnType::Byte => quote::quote!{ u8 },
-        model::ReturnType::Type => todo!("return sig: type"),
-        model::ReturnType::TypeReference => todo!("return sig type reference"),
-    };
-
-    output
+    Ok(variant)
 }
 
 #[cfg(test)]
 mod tests {
     use quote;
 
-    use crate::TRAIT_ATTRIBUTE_HELPER_NAME;
+    use crate::{TRAIT_ATTRIBUTE_HELPER_NAME, model};
 
     #[test]
     fn test_parse_enumtrait() {
@@ -378,13 +353,17 @@ mod tests {
 
         let item_src = quote::quote!{
             pub trait MyTrait {
-                // test default parsing
+                // test preset variant parsing
+                #[enumtrait::Str(preset(Variant))]
                 fn name(&self) -> &'static str;
+                // test default parsing
                 #[enumtrait::Str(default(":)"))]
                 fn emote(&self) -> &'static str;
                 // test ordinal
                 #[enumtrait::Num(default(44))]
                 fn column(&self) -> usize;
+                #[enumtrait::Num(preset(Serial), start(3), increment(2))]
+                fn serial(&self) -> u64;
                 // test default implementation
                 fn something_default(&self) {
                     todo!("done");
@@ -393,11 +372,36 @@ mod tests {
         };
         
         let model = super::parse_enumtrait(attribute_src, item_src).unwrap().model;
+        dbg!(&model);
 
         assert_eq!(vec!["crate", "tests"], model.identifier().path());
         assert_eq!("MyTrait", model.identifier().name());
 
-        dbg!(&model);
+        let item_src = quote::quote!{
+            enum MyEnum {
+                One,
+                Two,
+                Three
+            }
+        };
+
+        let model_bytes = bincode::serialize(&model).unwrap();
+        let enum_model = super::parse_traitenum(item_src, &model_bytes).unwrap().model;
+
+        match enum_model.variant("One").unwrap().value("name").unwrap().value() {
+            model::Value::StaticStr(ref str) => assert_eq!("One", str),
+            _ => assert!(false, "Incorrect value type for attribute: name")
+        }
+
+        match enum_model.variant("Two").unwrap().value("column").unwrap().value() {
+            model::Value::UnsignedSize(num) => assert_eq!(44, *num),
+            _ => assert!(false, "Incorrect value type for attribute: column")
+        }
+
+        match enum_model.variant("Three").unwrap().value("serial").unwrap().value() {
+            model::Value::UnsignedInteger64(num) => assert_eq!(7, *num),
+            _ => assert!(false, "Incorrect value type for attribute: serial")
+        }
     }
 
     #[test]
