@@ -83,11 +83,13 @@ pub(crate) fn parse_attribute(
         syn::parenthesized!(content in meta.input);
 
         match attribute_def_name.as_str() {
-            "Str" | "StaticStr" => 
+            "Bool" =>  
+                parse_bool_attribute_meta(&mut def, &name, content, span, return_type)?,
+            "Str" => 
                 parse_string_attribute_meta(&mut def, &name, content, span, return_type)?,
-            "Num" | "Number" => 
+            "Num" => 
                 parse_generic_number_attribute_meta(&mut def, &name, content, span, return_type)?,
-                _ => synerr!(span, "Unknown attribute definition: {}", attribute_def_name)
+            _ => synerr!(span, "Unknown attribute definition: {}", attribute_def_name)
 
         };
 
@@ -110,12 +112,33 @@ fn parse_string_attribute_meta( // item
     }
 }
 
+fn parse_bool_attribute_meta(
+        def: &mut model::AttributeDefinition,
+        name: &str,
+        content: syn::parse::ParseBuffer,
+        span: proc_macro2::Span,
+        _return_type: model::ReturnType) -> Result<(), syn::Error> {
+    let booldef = match def {
+        model::AttributeDefinition::Bool(def) => def,
+        _ => synerr!(span, "Incorrect attribute definition for return type for property: {}", name)
+    };
+
+    match name {
+       "default" => {
+            booldef.default = Some(content.parse::<syn::LitBool>()?.value())
+       },
+       _ => synerr!(span, "Unknown attribute definition property: {}", name)
+    }
+
+    Ok(())
+}
+
 fn parse_static_str_attribute_meta(
         def: &mut model::StaticStrAttributeDefinition,
         name: &str,
         content: syn::parse::ParseBuffer,
         span: proc_macro2::Span,
-        return_type: model::ReturnType) -> Result<(), syn::Error> {
+        _return_type: model::ReturnType) -> Result<(), syn::Error> {
     match name {
        "default" => {
             def.default = Some(content.parse::<syn::LitStr>()?.value())

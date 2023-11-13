@@ -364,6 +364,8 @@ mod tests {
                 fn column(&self) -> usize;
                 #[enumtrait::Num(preset(Serial), start(3), increment(2))]
                 fn serial(&self) -> u64;
+                #[enumtrait::Bool(default(true))]
+                fn able(&self) -> bool;
                 // test default implementation
                 fn something_default(&self) {
                     todo!("done");
@@ -381,12 +383,14 @@ mod tests {
             enum MyEnum {
                 One,
                 Two,
+                #[traitenum(able(false))]
                 Three
             }
         };
 
         let model_bytes = bincode::serialize(&model).unwrap();
         let enum_model = super::parse_traitenum(item_src, &model_bytes).unwrap().model;
+        dbg!(&enum_model);
 
         match enum_model.variant("One").unwrap().value("name").unwrap().value() {
             model::Value::StaticStr(ref str) => assert_eq!("One", str),
@@ -400,6 +404,11 @@ mod tests {
 
         match enum_model.variant("Three").unwrap().value("serial").unwrap().value() {
             model::Value::UnsignedInteger64(num) => assert_eq!(7, *num),
+            _ => assert!(false, "Incorrect value type for attribute: serial")
+        }
+
+        match enum_model.variant("Three").unwrap().value("able").unwrap().value() {
+            model::Value::Bool(b) => assert_eq!(false, *b),
             _ => assert!(false, "Incorrect value type for attribute: serial")
         }
     }

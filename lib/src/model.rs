@@ -289,7 +289,13 @@ impl BoolAttributeDefinition {
             default: None
         }
     }
+
+    pub fn validate(&self) -> Result<(), &str> {
+        Ok(())
+    }
 }
+
+
 
 #[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct NumberAttributeDefinition<N> {
