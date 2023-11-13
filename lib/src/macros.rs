@@ -382,6 +382,7 @@ mod tests {
         let item_src = quote::quote!{
             enum MyEnum {
                 One,
+                #[traitenum(name("2"))]
                 Two,
                 #[traitenum(able(false))]
                 Three
@@ -392,25 +393,20 @@ mod tests {
         let enum_model = super::parse_traitenum(item_src, &model_bytes).unwrap().model;
         dbg!(&enum_model);
 
-        match enum_model.variant("One").unwrap().value("name").unwrap().value() {
-            model::Value::StaticStr(ref str) => assert_eq!("One", str),
-            _ => assert!(false, "Incorrect value type for attribute: name")
+        macro_rules! assert_variant_val {
+            ($variant_name:literal, $attribute_name:literal, $value_type:ident, $expected:expr) => {
+                match enum_model.variant($variant_name).unwrap().value($attribute_name).unwrap().value() {
+                    model::Value::$value_type(ref val) => assert_eq!($expected, *val),
+                    _ => assert!(false, "Incorrect value type for attribute: $attribute_name")
+                }
+            };
         }
 
-        match enum_model.variant("Two").unwrap().value("column").unwrap().value() {
-            model::Value::UnsignedSize(num) => assert_eq!(44, *num),
-            _ => assert!(false, "Incorrect value type for attribute: column")
-        }
-
-        match enum_model.variant("Three").unwrap().value("serial").unwrap().value() {
-            model::Value::UnsignedInteger64(num) => assert_eq!(7, *num),
-            _ => assert!(false, "Incorrect value type for attribute: serial")
-        }
-
-        match enum_model.variant("Three").unwrap().value("able").unwrap().value() {
-            model::Value::Bool(b) => assert_eq!(false, *b),
-            _ => assert!(false, "Incorrect value type for attribute: serial")
-        }
+        assert_variant_val!("One", "name", StaticStr, "One");
+        assert_variant_val!("Two", "column", UnsignedSize, 44);
+        assert_variant_val!("Two", "name", StaticStr, "2");
+        assert_variant_val!("Three", "serial", UnsignedInteger64, 7);
+        assert_variant_val!("Three", "able", Bool, false);
     }
 
     #[test]
