@@ -1,4 +1,4 @@
-use std::{fmt::Display, str::FromStr, collections::HashMap, hash::Hash};
+use std::{fmt::Display, str::FromStr, collections::HashMap};
 use serde;
 
 pub mod parse;
@@ -42,7 +42,9 @@ impl Identifier {
 
 impl Display for Identifier {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}{}", self.path.join("::"), self.name)
+        let mut path = self.path.clone();
+        path.push(self.name.to_owned());
+        write!(f, "{}", path.join("::"))
     }
 }
 
@@ -60,7 +62,6 @@ pub enum ReturnType {
     Float32,
     Byte,
     Type,
-    TypeReference
 }
 
 impl FromStr for ReturnType {
@@ -95,8 +96,9 @@ pub enum AttributeDefinition {
     Integer32(NumberAttributeDefinition<i32>),
     Float32(NumberAttributeDefinition<f32>),
     Byte(NumberAttributeDefinition<u8>),
-    Type(TypeAttributeDefinition),
-    Relation(RelationAttributeDefinition)
+    FieldlessEnum(FieldlessEnumAttributeDefinition),
+    Relation(RelationAttributeDefinition),
+    Type(TypeAttributeDefinition)
 }
 
 impl AttributeDefinition {
@@ -112,8 +114,9 @@ impl AttributeDefinition {
             AttributeDefinition::Integer32(numdef) => numdef.default.is_some(),
             AttributeDefinition::Float32(numdef) => numdef.default.is_some(),
             AttributeDefinition::Byte(numdef) => numdef.default.is_some(),
-            AttributeDefinition::Type(typedef) => typedef.default.is_some(),
+            AttributeDefinition::FieldlessEnum(typedef) => typedef.default.is_some(),
             AttributeDefinition::Relation(_reldef) => false,
+            AttributeDefinition::Type(_typedef) => false,
         }
     }
 
@@ -159,11 +162,12 @@ impl AttributeDefinition {
                 Some(n) => Some(Value::Byte(*n)),
                 None => None
             },
-            AttributeDefinition::Type(ref typedef) => match &typedef.default {
-                Some(id) => Some(Value::Type(id.clone())),
+            AttributeDefinition::FieldlessEnum(ref typedef) => match &typedef.default {
+                Some(id) => Some(Value::EnumVariant(id.clone())),
                 None => None
             },
             AttributeDefinition::Relation(_reldef) => None,
+            AttributeDefinition::Type(_reldef) => None,
         }
     }
 
@@ -179,8 +183,9 @@ impl AttributeDefinition {
             AttributeDefinition::Integer32(numdef) => numdef.preset.is_some(),
             AttributeDefinition::Float32(numdef) => numdef.preset.is_some(),
             AttributeDefinition::Byte(numdef) => numdef.preset.is_some(),
-            AttributeDefinition::Type(_typedef) => false,
+            AttributeDefinition::FieldlessEnum(_typedef) => false,
             AttributeDefinition::Relation(_reldef) => false,
+            AttributeDefinition::Type(_typedef) => false,
         }
         
     }
@@ -219,8 +224,9 @@ impl AttributeDefinition {
             AttributeDefinition::Integer32(ref numdef) => preset_numdef!(Value::Integer32, i32, numdef),
             AttributeDefinition::Float32(ref numdef) => preset_numdef!(Value::Float32, f32, numdef),
             AttributeDefinition::Byte(ref numdef) => preset_numdef!(Value::Byte, u8, numdef),
-            AttributeDefinition::Type(_typedef) => None,
+            AttributeDefinition::FieldlessEnum(_typedef) => None,
             AttributeDefinition::Relation(_reldef) => None,
+            AttributeDefinition::Type(_typedef) => None,
         }
     }
 
@@ -253,15 +259,18 @@ impl AttributeDefinition {
             AttributeDefinition::Integer32(numdef) => numdef.validate(),
             AttributeDefinition::Float32(numdef) => numdef.validate(),
             AttributeDefinition::Byte(numdef) => numdef.validate(),
-            AttributeDefinition::Type(_) => todo!(),
+            AttributeDefinition::FieldlessEnum(enumdef) => enumdef.validate(),
             AttributeDefinition::Relation(_) => todo!(),
+            AttributeDefinition::Type(_) => todo!(),
         }
     }
 }
 
-impl From<ReturnType> for AttributeDefinition {
-    fn from(return_type: ReturnType) -> Self {
-        match return_type {
+impl TryFrom<(ReturnType, Option<Identifier>)> for AttributeDefinition {
+    type Error = String;
+
+    fn try_from(value: (ReturnType, Option<Identifier>)) -> Result<Self, Self::Error> {
+        Ok(match value.0 {
             ReturnType::Bool => AttributeDefinition::Bool(BoolAttributeDefinition::new()),
             ReturnType::StaticStr => AttributeDefinition::StaticStr(StaticStrAttributeDefinition::new()),
             ReturnType::UnsignedSize => AttributeDefinition::UnsignedSize(NumberAttributeDefinition::new()),
@@ -272,9 +281,11 @@ impl From<ReturnType> for AttributeDefinition {
             ReturnType::Integer32 => AttributeDefinition::Integer32(NumberAttributeDefinition::new()),
             ReturnType::Float32 => AttributeDefinition::Float32(NumberAttributeDefinition::new()),
             ReturnType::Byte => AttributeDefinition::Byte(NumberAttributeDefinition::new()),
-            ReturnType::Type => todo!(),
-            ReturnType::TypeReference => todo!(),
-        }
+            ReturnType::Type => {
+                let id = value.1.ok_or("Missing Identifier for ReturnType::Type")?;
+                AttributeDefinition::Type(TypeAttributeDefinition::new(id))
+            },
+        })
     }
 }
 
@@ -386,14 +397,41 @@ impl StaticStrAttributeDefinition {
 }
 
 #[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize)]
-pub struct TypeAttributeDefinition {
+pub struct FieldlessEnumAttributeDefinition {
     identifier: Identifier,
-    is_reference: bool,
     default: Option<Identifier>
 }
 
+impl FieldlessEnumAttributeDefinition {
+    pub fn new(identifier: Identifier) -> Self {
+        Self {
+            identifier,
+            default: None
+        }
+    }
+
+    pub fn validate(&self) -> Result<(), &str> {
+        Ok(())
+    }
+}
+
+#[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct TypeAttributeDefinition {
+    identifier: Identifier,
+}
+
+impl TypeAttributeDefinition {
+    pub fn new(identifier: Identifier) -> Self {
+        Self {
+            identifier
+        }
+    }
+}
+
+
 #[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum RelationshipType {
+    OneToOne,
     OneToMany,
     ManyToOne
 }
@@ -452,8 +490,8 @@ pub enum Value {
     Float32(f32),
     UnsignedSize(usize),
     Byte(u8),
+    EnumVariant(Identifier),
     Type(Identifier),
-    Relation(Identifier)
 }
 
 impl From<&[u8]> for EnumTrait {

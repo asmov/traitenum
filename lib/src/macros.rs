@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use quote::{self, ToTokens};
 use syn::{self, spanned::Spanned};
 use proc_macro2;
@@ -18,7 +16,7 @@ struct EnumTraitMacroOutput {
 
 pub fn enumtrait_macro(attr: proc_macro2::TokenStream, item: proc_macro2::TokenStream)
         -> Result<proc_macro2::TokenStream, syn::Error> {
-    let EnumTraitMacroOutput {tokens, model} = parse_enumtrait(attr, item)?;
+    let EnumTraitMacroOutput {tokens, model} = parse_enumtrait_macro(attr, item)?;
     let model_name = syn::Ident::new(
         &format!("{}{}", MODEL_PREFIX, model.identifier().name().to_uppercase()), tokens.span());
 
@@ -35,7 +33,7 @@ pub fn enumtrait_macro(attr: proc_macro2::TokenStream, item: proc_macro2::TokenS
     Ok(output)
 }
 
-fn parse_enumtrait(attr: proc_macro2::TokenStream, item: proc_macro2::TokenStream)
+fn parse_enumtrait_macro(attr: proc_macro2::TokenStream, item: proc_macro2::TokenStream)
         -> Result<EnumTraitMacroOutput, syn::Error> {
     let identifier: model::Identifier = syn::parse2(attr)?;
     
@@ -59,16 +57,23 @@ fn parse_enumtrait(attr: proc_macro2::TokenStream, item: proc_macro2::TokenStrea
 
                 let method_name = func.sig.ident.to_string();
                 let mut return_type: Option<model::ReturnType> = None;
+                let mut return_type_identifier: Option<model::Identifier> = None;
 
                 match &func.sig.output {
                     syn::ReturnType::Default => synerr!(span, "Default return types () are not supported"),
                     syn::ReturnType::Type(_, ref returntype) => match **returntype {
                         syn::Type::Path(ref path_type) => {
-                            return_type = match model::ReturnType::try_from(&path_type.path) {
-                                Ok(v) => Some(v),
-                                Err(e) => synerr!(span, "Unsupported return type: {}",
-                                    &path_type.path.to_token_stream().to_string())
-                            };
+                            match model::ReturnType::try_from(&path_type.path) {
+                                Ok(v) => return_type = Some(v),
+                                Err(_) => {
+                                    return_type = Some(model::ReturnType::Type);
+                                    return_type_identifier = match model::Identifier::try_from(&path_type.path) {
+                                        Ok(id) => Some(id),
+                                        Err(_) => synerr!(span, "Unsupported return type: {}",
+                                            &path_type.path.to_token_stream().to_string())
+                                    }
+                                }
+                                                                };
                         },
                         syn::Type::Reference(ref ref_type) => {
                             // only elided and static lifetimes are supported
@@ -104,7 +109,7 @@ fn parse_enumtrait(attr: proc_macro2::TokenStream, item: proc_macro2::TokenStrea
                                     "Unsupported return reference type: {}", ref_type.to_token_stream().to_string())
                             }
                         },
-                        _ => todo!("unsupp"),
+                        _ => todo!("Unimplemented trait return type"),
                     },
                 }
 
@@ -126,9 +131,11 @@ fn parse_enumtrait(attr: proc_macro2::TokenStream, item: proc_macro2::TokenStrea
                 });
 
                 let attribute_def = if let Some(attrib) = attrib {
-                    parse::parse_attribute(attrib, trait_item.span(), return_type)?
+                    parse::parse_attribute_definition(attrib, trait_item.span(), return_type, return_type_identifier)?
                 } else {
-                    model::AttributeDefinition::from(return_type)
+                    model::AttributeDefinition::try_from((return_type, return_type_identifier))
+                        .map_err(|e| mksynerr!(span, "Unable to parse definition from return signature for `{}` :: {}",
+                            method_name, e))?
                 };
 
                 // ensure that the attribute definition adheres to its own rules
@@ -183,20 +190,19 @@ fn parse_enumtrait(attr: proc_macro2::TokenStream, item: proc_macro2::TokenStrea
 }
 
 #[derive(Debug)]
-pub struct TraitEnumMacroOutput {
+struct TraitEnumMacroOutput {
     tokens: proc_macro2::TokenStream,
     model: model::TraitEnum
 }
 
-
 pub fn traitenum_derive_macro(
         item: proc_macro2::TokenStream,
         model_bytes: &[u8]) -> Result<proc_macro2::TokenStream, syn::Error> {
-    let output: TraitEnumMacroOutput = parse_traitenum(item, model_bytes)?;
-    Ok(output.tokens)
+    let TraitEnumMacroOutput { tokens, model: _model } = parse_traitenum_macro(item, model_bytes)?;
+    Ok(tokens)
 }
  
-fn parse_traitenum(
+fn parse_traitenum_macro(
         item: proc_macro2::TokenStream,
         model_bytes: &[u8]) -> Result<TraitEnumMacroOutput, syn::Error> {
     let model = model::EnumTrait::from(model_bytes);
@@ -223,7 +229,7 @@ fn parse_traitenum(
                 .is_some_and(|s| ENUM_ATTRIBUTE_HELPER_NAME == s.ident.to_string()));
 
         let mut variant = if let Some(attribute) = attribute {
-            parse_variant(&variant_name, attribute, &model)?
+            parse::parse_variant(&variant_name, attribute, &model)?
         } else {
             model::Variant::partial(variant_name.to_owned())
         };
@@ -251,7 +257,7 @@ fn parse_traitenum(
     let method_outputs = model.methods().iter().map(|method| {
         let method_name = method.name();
         let func: syn::Ident = syn::Ident::new(method_name, span);
-        let return_type = method.return_type().to_token_stream();
+        let return_type = method.return_type_tokens();
 
         // create the match{} body of the method, mapping variants to their return value
         let variant_outputs = data_enum.variants.iter().map(|variant_data| {
@@ -291,54 +297,6 @@ fn parse_traitenum(
     })
 }
 
-fn parse_variant(variant_name: &str, attr: &syn::Attribute, model: &model::EnumTrait)
-        -> Result<model::Variant, syn::Error> {
-    let mut variant = model::Variant::partial(variant_name.to_owned());
-    attr.parse_nested_meta(|meta| {
-        let attr_name = meta.path.get_ident()
-            .ok_or(mksynerr!(attr.span(), "Invalid enum attribute: `{}`",
-                meta.path.to_token_stream().to_string()))?
-            .to_string();
-
-        if variant.has(&attr_name) {
-            synerr!(attr.span(), "Duplicate enum attribute value for: {}", attr_name);
-        }
-
-        let method = model.methods().iter().find(|m| m.name() == attr_name)
-            .ok_or(mksynerr!(attr.span(), "Unknown enum attribute: {}", attr_name))?;
-
-        let attribute_def = &method.attribute_definition();
-
-        let content;
-        syn::parenthesized!(content in meta.input);
-
-        let value = match attribute_def {
-            model::AttributeDefinition::Bool(_) => model::Value::Bool(
-                content.parse::<syn::LitBool>()?.value()),
-            model::AttributeDefinition::StaticStr(_) => model::Value::StaticStr(
-                content.parse::<syn::LitStr>()?.value()),
-            model::AttributeDefinition::UnsignedSize(_) => model::Value::UnsignedSize(
-                content.parse::<syn::LitInt>()?.base10_parse()?),
-            model::AttributeDefinition::UnsignedInteger64(_) => todo!(),
-            model::AttributeDefinition::Integer64(_) => todo!(),
-            model::AttributeDefinition::Float64(_) => todo!(),
-            model::AttributeDefinition::UnsignedInteger32(_) => todo!(),
-            model::AttributeDefinition::Integer32(_) => todo!(),
-            model::AttributeDefinition::Float32(_) => todo!(),
-            model::AttributeDefinition::Byte(_) => todo!(),
-            model::AttributeDefinition::Type(_) => todo!(),
-            model::AttributeDefinition::Relation(_) => todo!(),
-        };
-
-        let attribute_value = model::AttributeValue::new(value);
-        variant.set_value(attr_name, attribute_value);
-
-        Ok(())
-    })?;
-
-    Ok(variant)
-}
-
 #[cfg(test)]
 mod tests {
     use quote;
@@ -366,6 +324,8 @@ mod tests {
                 fn serial(&self) -> u64;
                 #[enumtrait::Bool(default(true))]
                 fn able(&self) -> bool;
+                #[enumtrait::Enum(default(GroceryBag::Plastic))]
+                fn bag(&self) -> GroceryBag;
                 // test default implementation
                 fn something_default(&self) {
                     todo!("done");
@@ -373,7 +333,7 @@ mod tests {
             }
         };
         
-        let model = super::parse_enumtrait(attribute_src, item_src).unwrap().model;
+        let model = super::parse_enumtrait_macro(attribute_src, item_src).unwrap().model;
         dbg!(&model);
 
         assert_eq!(vec!["crate", "tests"], model.identifier().path());
@@ -385,12 +345,15 @@ mod tests {
                 #[traitenum(name("2"))]
                 Two,
                 #[traitenum(able(false))]
-                Three
+                Three,
+                #[traitenum(bag(GroceryBag::Paper))]
+                Four
+                
             }
         };
 
         let model_bytes = bincode::serialize(&model).unwrap();
-        let enum_model = super::parse_traitenum(item_src, &model_bytes).unwrap().model;
+        let enum_model = super::parse_traitenum_macro(item_src, &model_bytes).unwrap().model;
         dbg!(&enum_model);
 
         macro_rules! assert_variant_val {
@@ -402,11 +365,23 @@ mod tests {
             };
         }
 
+        macro_rules! assert_variant_enumval {
+            ($variant_name:literal, $attribute_name:literal, $expected:literal) => {
+                match enum_model.variant($variant_name).unwrap().value($attribute_name).unwrap().value() {
+                    model::Value::EnumVariant(ref val) => assert_eq!($expected, val.to_string()),
+                    _ => assert!(false, "Incorrect value type for attribute: $attribute_name")
+                }
+            };
+        }
+
+
         assert_variant_val!("One", "name", StaticStr, "One");
         assert_variant_val!("Two", "column", UnsignedSize, 44);
         assert_variant_val!("Two", "name", StaticStr, "2");
         assert_variant_val!("Three", "serial", UnsignedInteger64, 7);
         assert_variant_val!("Three", "able", Bool, false);
+        assert_variant_enumval!("Three", "bag", "GroceryBag::Plastic");
+        assert_variant_enumval!("Four", "bag", "GroceryBag::Paper");
     }
 
     #[test]
@@ -422,12 +397,12 @@ mod tests {
 
         // test error: empty identifier
         let attribute_src = quote::quote!{};
-        assert!(super::parse_enumtrait(attribute_src, simple_item_src.clone()).is_err(),
+        assert!(super::parse_enumtrait_macro(attribute_src, simple_item_src.clone()).is_err(),
             "Empty #[{}(<pathspec>)] should throw an Error", TRAIT_ATTRIBUTE_HELPER_NAME);
         
         // test error: mismatched trait name with identifier
         let attribute_src = quote::quote!{ crate::tests::TheirTrait };
-        assert!(super::parse_enumtrait(attribute_src, simple_item_src.clone()).is_err(),
+        assert!(super::parse_enumtrait_macro(attribute_src, simple_item_src.clone()).is_err(),
             "Mismatched trait name and #[{}(<pathspec>)] identifier should throw an Error", TRAIT_ATTRIBUTE_HELPER_NAME);
     }
 

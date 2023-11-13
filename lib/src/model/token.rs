@@ -1,4 +1,5 @@
-use quote::{self, TokenStreamExt};
+use quote::{self, TokenStreamExt, ToTokens};
+use syn::spanned::Spanned;
 
 use crate::model;
 
@@ -16,8 +17,8 @@ impl quote::ToTokens for model::AttributeValue {
                 model::Value::Integer32(n) => quote::quote!(#n),
                 model::Value::Float32(n) => quote::quote!(#n),
                 model::Value::Byte(n) => quote::quote!(#n),
-                model::Value::Type(id) => todo!("tokenize identifier"),
-                model::Value::Relation(id) => todo!("tokenize identifier"),
+                model::Value::EnumVariant(id) => id.to_token_stream(),
+                model::Value::Type(id) => id.to_token_stream(),
             }
         );
     }
@@ -37,10 +38,41 @@ impl quote::ToTokens for model::ReturnType{
                 model::ReturnType::Integer32 => quote::quote!{ i32 },
                 model::ReturnType::Float32 => quote::quote!{ f32 },
                 model::ReturnType::Byte => quote::quote!{ u8 },
-                model::ReturnType::Type => todo!("return sig: type"),
-                model::ReturnType::TypeReference => todo!("return sig type reference"),
+                // this has to be handled conditionally
+                model::ReturnType::Type => unreachable!("ReturnType::Type cannot directly produce a TokenStream")
             }
         );
     }
 }
 
+impl quote::ToTokens for model::Identifier {
+    fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
+        let mut path = syn::Path {
+            leading_colon: None,
+            segments: syn::punctuated::Punctuated::new()
+        };
+
+        self.path.iter().for_each(|s| {
+                let ident = syn::Ident::new(s, tokens.span());
+                let segment = syn::PathSegment::from(ident);
+                path.segments.push_value(segment)
+            }
+        );
+        
+        tokens.append_all(path.to_token_stream())
+    }
+}
+
+impl model::Method {
+    pub fn return_type_tokens(&self) -> proc_macro2::TokenStream {
+        match self.return_type {
+            model::ReturnType::Type => {
+                match self.attribute_definition() {
+                    model::AttributeDefinition::FieldlessEnum(enumdef) => enumdef.identifier.to_token_stream(),
+                    _ => unreachable!("Invalid attribute definition for ReturnType::Type")
+                }
+            },
+            _ => self.return_type().to_token_stream()
+        }
+    }
+}

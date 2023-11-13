@@ -1,31 +1,45 @@
 use std::str::FromStr;
 
 use quote::ToTokens;
+use syn::spanned::Spanned;
 use syn::{self, parse};
 
 use crate::model;
 use crate::{synerr, mksynerr, TRAIT_ATTRIBUTE_HELPER_NAME};
 
+use super::FieldlessEnumAttributeDefinition;
+
 const ERROR_PREFIX: &'static str = "traitenum: ";
 
 impl parse::Parse for model::Identifier {
     fn parse(input: parse::ParseStream) -> syn::Result<Self> {
-        let mut full_path: syn::Path = input.parse().map_err(|_| syn::Error::new(input.span(),
+        let path: syn::Path = input.parse().map_err(|_| syn::Error::new(input.span(),
             "Unable to parse trait #enumtrait(<absolute trait path>)"))?;
-        let name = full_path.segments.pop()
-            .ok_or(syn::Error::new(input.span(), "enumtrait: Unable to parse trait name"))?
-            .value().ident.to_string();
-        let path = full_path.segments.pairs()
-            .map(|pair| pair.value().ident.to_string())
-            .collect();
-
-        Ok(Self::new(path, name))
+        Self::try_from(&path)
+            .or_else(|_| synerr!(input.span(), "Unable to parse Identifier from Path: {}",
+                path.to_token_stream().to_string()))
     }
 }
 
 impl From<&syn::Ident> for model::Identifier{
     fn from(ident: &syn::Ident) -> Self {
         model::Identifier::new(Vec::new(), ident.to_string())
+    }
+}
+
+impl TryFrom<&syn::Path> for model::Identifier{
+    type Error = ();
+
+    fn try_from(path: &syn::Path) -> Result<Self, Self::Error> {
+        let mut path = path.clone();
+        let name = path.segments.pop()
+            .ok_or(())?
+            .value().ident.to_string();
+        let path = path.segments.pairs()
+            .map(|pair| pair.value().ident.to_string())
+            .collect();
+
+        Ok(Self::new(path, name))
     }
 }
 
@@ -40,27 +54,12 @@ impl TryFrom<&syn::Path> for model::ReturnType {
     }
 }
 
-pub trait ParseAttribute {
-    fn parse_attribute(
-            attr: &syn::Attribute,
-            span: proc_macro2::Span,
-            return_type: model::ReturnType) -> Result<(), syn::Error>;
-}
-
-pub trait ParseAttributeMeta {
-    fn parse_attribute_meta(
-            def: &mut model::AttributeDefinition,
-            name: &str,
-            content: syn::parse::ParseBuffer,
-            span: proc_macro2::Span,
-            return_type: model::ReturnType) -> Result<(), syn::Error>;
-}
-
-
-pub(crate) fn parse_attribute(
+pub(crate) fn parse_attribute_definition(
         attr: &syn::Attribute,
         span: proc_macro2::Span,
-        return_type: model::ReturnType) -> Result<model::AttributeDefinition, syn::Error> {
+        return_type: model::ReturnType,
+        return_type_id: Option<model::Identifier>
+    ) -> Result<model::AttributeDefinition, syn::Error> {
     if attr.path().segments.len() != 2 {
         synerr!(span, "Unable to parse helper attribute: `{}`. Format: {}::DefinitionName",
             TRAIT_ATTRIBUTE_HELPER_NAME,
@@ -72,7 +71,24 @@ pub(crate) fn parse_attribute(
             "Empty helper attribute definition name. Format: {}::DefinitionName",
             TRAIT_ATTRIBUTE_HELPER_NAME))?.ident.to_string();
 
-    let mut def = model::AttributeDefinition::from(return_type);
+    let mut def = model::AttributeDefinition::try_from((return_type, return_type_id))
+        .map_err(|e| mksynerr!(span, "Unable to parse return type for definition `{}` :: {}",
+            attr.path().to_token_stream().to_string(), e))?;
+
+    // for Type-based definitions, we further constraint the definition 
+    match def {
+        model::AttributeDefinition::Type(typedef) => {
+            match attribute_def_name.as_str() {
+                "Enum" => {
+                    def = model::AttributeDefinition::FieldlessEnum(
+                        FieldlessEnumAttributeDefinition::new(typedef.identifier));
+                },
+                _ => synerr!(span, "Mismatched definition type for Type return type: {}", attribute_def_name)
+            }
+        },
+        _ => ()
+    }
+
     attr.parse_nested_meta(|meta| {
         let name = meta.path.get_ident()
             .ok_or(mksynerr!(span, "Unknown definition property: `{}`",
@@ -84,11 +100,13 @@ pub(crate) fn parse_attribute(
 
         match attribute_def_name.as_str() {
             "Bool" =>  
-                parse_bool_attribute_meta(&mut def, &name, content, span, return_type)?,
+                parse_bool_attribute_definition(&mut def, &name, content, span, return_type)?,
             "Str" => 
-                parse_string_attribute_meta(&mut def, &name, content, span, return_type)?,
+                parse_string_attribute_definition(&mut def, &name, content, span, return_type)?,
             "Num" => 
-                parse_generic_number_attribute_meta(&mut def, &name, content, span, return_type)?,
+                parse_number_attribute_definition(&mut def, &name, content, span, return_type)?,
+            "Enum" =>
+                parse_enum_attribute_definition(&mut def, &name, content, span, return_type)?,
             _ => synerr!(span, "Unknown attribute definition: {}", attribute_def_name)
 
         };
@@ -99,20 +117,7 @@ pub(crate) fn parse_attribute(
     Ok(def)
 }
 
-fn parse_string_attribute_meta( // item
-        def: &mut model::AttributeDefinition,
-        name: &str,
-        content: syn::parse::ParseBuffer,
-        span: proc_macro2::Span,
-        return_type: model::ReturnType) -> Result<(), syn::Error>
-{
-    match def {
-        model::AttributeDefinition::StaticStr(def) => parse_static_str_attribute_meta(def, name, content, span, return_type),
-        _ => synerr!(span, "Unsupported def")
-    }
-}
-
-fn parse_bool_attribute_meta(
+fn parse_bool_attribute_definition(
         def: &mut model::AttributeDefinition,
         name: &str,
         content: syn::parse::ParseBuffer,
@@ -133,29 +138,56 @@ fn parse_bool_attribute_meta(
     Ok(())
 }
 
-fn parse_static_str_attribute_meta(
-        def: &mut model::StaticStrAttributeDefinition,
+fn parse_enum_attribute_definition(
+        def: &mut model::AttributeDefinition,
         name: &str,
         content: syn::parse::ParseBuffer,
         span: proc_macro2::Span,
         _return_type: model::ReturnType) -> Result<(), syn::Error> {
+    let enumdef = match def {
+        model::AttributeDefinition::FieldlessEnum(def) => def,
+        _ => synerr!(span, "Mismatched definition for Enum: {}", name)
+    };
+
     match name {
        "default" => {
-            def.default = Some(content.parse::<syn::LitStr>()?.value())
+            let id: model::Identifier = content.parse()?;
+            enumdef.default = Some(id)
        },
-       "preset" => {
-            let variant_name = content.parse::<syn::Ident>()?.to_string();
-            let preset = model::StringPreset::from_str(&variant_name)
-                .or(Err(mksynerr!(span, "Unknown String preset: {}", variant_name)))?;
-            def.preset = Some(preset);
-       },
-       _ => synerr!(span, "Unknown attribute definition property: {}", name)
+       _ => synerr!(span, "Unknown definition property for Enum: {}", name)
     }
 
     Ok(())
 }
 
-fn parse_generic_number_attribute_meta( // item
+fn parse_string_attribute_definition(
+        def: &mut model::AttributeDefinition,
+        name: &str,
+        content: syn::parse::ParseBuffer,
+        span: proc_macro2::Span,
+        _return_type: model::ReturnType) -> Result<(), syn::Error> {
+    let strdef = match def {
+        model::AttributeDefinition::StaticStr(def) => def,
+        _ => synerr!(span, "Mismatched definition for Str: {}", name)
+    };
+
+    match name {
+       "default" => {
+            strdef.default = Some(content.parse::<syn::LitStr>()?.value())
+       },
+       "preset" => {
+            let variant_name = content.parse::<syn::Ident>()?.to_string();
+            let preset = model::StringPreset::from_str(&variant_name)
+                .or(Err(mksynerr!(span, "Unknown String preset: {}", variant_name)))?;
+            strdef.preset = Some(preset);
+       },
+       _ => synerr!(span, "Unknown definition property for Str: {}", name)
+    }
+
+    Ok(())
+}
+
+fn parse_number_attribute_definition(
         def: &mut model::AttributeDefinition,
         name: &str,
         content: syn::parse::ParseBuffer,
@@ -163,43 +195,28 @@ fn parse_generic_number_attribute_meta( // item
         return_type: model::ReturnType) -> Result<(), syn::Error>
 {
     match def {
-        model::AttributeDefinition::UnsignedSize(def) => parse_number_attribute_meta(def, name, content, span, return_type),
-        model::AttributeDefinition::UnsignedInteger64(def) => parse_number_attribute_meta(def, name, content, span, return_type),
-        model::AttributeDefinition::Integer64(def) => parse_number_attribute_meta(def, name, content, span, return_type),
-        model::AttributeDefinition::Float64(def) => parse_number_attribute_meta(def, name, content, span, return_type),
-        model::AttributeDefinition::UnsignedInteger32(def) => parse_number_attribute_meta(def, name, content, span, return_type),
-        model::AttributeDefinition::Integer32(def) => parse_number_attribute_meta(def, name, content, span, return_type),
-        model::AttributeDefinition::Float32(def) => parse_number_attribute_meta(def, name, content, span, return_type),
-         _ => synerr!(span, "Unsupported def")
+        model::AttributeDefinition::UnsignedSize(def) => parse_number_definition(def, name, content, span, return_type, false),
+        model::AttributeDefinition::UnsignedInteger64(def) => parse_number_definition(def, name, content, span, return_type, false),
+        model::AttributeDefinition::Integer64(def) => parse_number_definition(def, name, content, span, return_type, false),
+        model::AttributeDefinition::Float64(def) => parse_number_definition(def, name, content, span, return_type, true),
+        model::AttributeDefinition::UnsignedInteger32(def) => parse_number_definition(def, name, content, span, return_type, false),
+        model::AttributeDefinition::Integer32(def) => parse_number_definition(def, name, content, span, return_type, true),
+        model::AttributeDefinition::Float32(def) => parse_number_definition(def, name, content, span, return_type, false),
+        _ => synerr!(span, "Mismatched definition for Num: {}", name)
     }
 }
  
-fn parse_number_attribute_meta<N>( // item
+fn parse_number_definition<N>(
         def: &mut model::NumberAttributeDefinition<N>,
         name: &str,
         content: syn::parse::ParseBuffer,
         span: proc_macro2::Span,
-        return_type: model::ReturnType) -> Result<(), syn::Error>
+        _return_type: model::ReturnType,
+        is_float: bool) -> Result<(), syn::Error>
 where
     N: FromStr,
     N::Err: std::fmt::Display
 {
-    let is_float = match return_type {
-        model::ReturnType::UnsignedSize => false,
-        model::ReturnType::UnsignedInteger64 => false,
-        model::ReturnType::Integer64 => false,
-        model::ReturnType::Float64 => true,
-        model::ReturnType::UnsignedInteger32 => false,
-        model::ReturnType::Integer32 => false,
-        model::ReturnType::Float32 => true,
-        model::ReturnType::Byte => false,
-        model::ReturnType::Bool
-        | model::ReturnType::TypeReference
-        | model::ReturnType::Type
-        | model::ReturnType::StaticStr =>
-            synerr!(span, "Unexpected return type for number attribute: {:#?}", return_type)
-    };
-
     macro_rules! parsenum {
         () => {
            if is_float {
@@ -218,7 +235,7 @@ where
        "preset" => {
             let variant_name = content.parse::<syn::Ident>()?.to_string();
             let preset = model::NumberPreset::from_str(&variant_name)
-                .or(Err(mksynerr!(span, "Unknown Number preset: {}", variant_name)))?;
+                .or(Err(mksynerr!(span, "Unknown definition preset for Num: {}", variant_name)))?;
             def.preset = Some(preset);
        },
        "start" => {
@@ -229,8 +246,67 @@ where
             let n: N = parsenum!();
             def.increment = Some(n)
        },
-       _ => synerr!(span, "Unknown attribute definition property: {}", name)
+       _ => synerr!(span, "Unknown definition property for Num: {}", name)
     }
 
     Ok(())
 }
+
+pub(crate) fn parse_variant(variant_name: &str, attr: &syn::Attribute, model: &model::EnumTrait)
+        -> Result<model::Variant, syn::Error> {
+    let mut variant = model::Variant::partial(variant_name.to_owned());
+    attr.parse_nested_meta(|meta| {
+        let attr_name = meta.path.get_ident()
+            .ok_or(mksynerr!(attr.span(), "Invalid enum attribute: `{}`",
+                meta.path.to_token_stream().to_string()))?
+            .to_string();
+
+        if variant.has(&attr_name) {
+            synerr!(attr.span(), "Duplicate enum attribute value for: {}", attr_name);
+        }
+
+        let method = model.methods().iter().find(|m| m.name() == attr_name)
+            .ok_or(mksynerr!(attr.span(), "Unknown enum attribute: {}", attr_name))?;
+
+        let attribute_def = &method.attribute_definition();
+
+        let content;
+        syn::parenthesized!(content in meta.input);
+
+        let value = match attribute_def {
+            model::AttributeDefinition::Bool(_) => model::Value::Bool(
+                content.parse::<syn::LitBool>()?.value()),
+            model::AttributeDefinition::StaticStr(_) => model::Value::StaticStr(
+                content.parse::<syn::LitStr>()?.value()),
+            model::AttributeDefinition::UnsignedSize(_) => model::Value::UnsignedSize(
+                content.parse::<syn::LitInt>()?.base10_parse()?),
+            model::AttributeDefinition::UnsignedInteger64(_) => model::Value::UnsignedInteger64(
+                content.parse::<syn::LitInt>()?.base10_parse()?),
+            model::AttributeDefinition::Integer64(_) => model::Value::Integer64(
+                content.parse::<syn::LitInt>()?.base10_parse()?),
+            model::AttributeDefinition::Float64(_) => model::Value::Float64(
+                content.parse::<syn::LitFloat>()?.base10_parse()?),
+            model::AttributeDefinition::UnsignedInteger32(_) => model::Value::UnsignedInteger32(
+                content.parse::<syn::LitInt>()?.base10_parse()?),
+            model::AttributeDefinition::Integer32(_) => model::Value::Integer32(
+                content.parse::<syn::LitInt>()?.base10_parse()?),
+            model::AttributeDefinition::Float32(_) => model::Value::Float32(
+                content.parse::<syn::LitFloat>()?.base10_parse()?),
+            model::AttributeDefinition::Byte(_) => model::Value::Byte(
+                content.parse::<syn::LitByte>()?.value()),
+            model::AttributeDefinition::FieldlessEnum(_) => model::Value::EnumVariant(
+                content.parse::<model::Identifier>()?),
+            model::AttributeDefinition::Relation(_) => todo!(),
+            model::AttributeDefinition::Type(_) => model::Value::Type(
+                content.parse::<model::Identifier>()?),
+        };
+
+        let attribute_value = model::AttributeValue::new(value);
+        variant.set_value(attr_name, attribute_value);
+
+        Ok(())
+    })?;
+
+    Ok(variant)
+}
+
