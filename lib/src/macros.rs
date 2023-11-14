@@ -133,7 +133,7 @@ fn parse_enumtrait_macro(attr: proc_macro2::TokenStream, item: proc_macro2::Toke
                 let attribute_def = if let Some(attrib) = attrib {
                     parse::parse_attribute_definition(attrib, trait_item.span(), return_type, return_type_identifier)?
                 } else {
-                    model::AttributeDefinition::try_from((return_type, return_type_identifier))
+                    model::AttributeDefinition::partial(None, return_type, return_type_identifier)
                         .map_err(|e| mksynerr!(span, "Unable to parse definition from return signature for `{}` :: {}",
                             method_name, e))?
                 };
@@ -300,8 +300,27 @@ fn parse_traitenum_macro(
 #[cfg(test)]
 mod tests {
     use quote;
-
     use crate::{TRAIT_ATTRIBUTE_HELPER_NAME, model};
+
+    /// Asserts that the expected value has been defined for a given enum variant
+    macro_rules! assert_traitenum_value {
+        ($model:ident, $variant_name:literal, $attribute_name:literal, $value_type:ident, $expected:expr) => {
+            match $model.variant($variant_name).unwrap().value($attribute_name).unwrap().value() {
+                model::Value::$value_type(ref val) => assert_eq!($expected, *val),
+                _ => assert!(false, "Incorrect value type for attribute: $attribute_name")
+            }
+        };
+    }
+
+    /// Asserts that the expected enum value has been defined for a given enum variant
+    macro_rules! assert_traitenum_value_enum {
+        ($model:ident, $variant_name:literal, $attribute_name:literal, $expected:literal) => {
+            match $model.variant($variant_name).unwrap().value($attribute_name).unwrap().value() {
+                model::Value::EnumVariant(ref val) => assert_eq!($expected, val.to_string()),
+                _ => assert!(false, "Incorrect value type for attribute: $attribute_name")
+            }
+        };
+    }
 
     #[test]
     fn test_parse_enumtrait() {
@@ -311,6 +330,8 @@ mod tests {
 
         let item_src = quote::quote!{
             pub trait MyTrait {
+                type ParentEnum: MyTrait;
+
                 // test preset variant parsing
                 #[enumtrait::Str(preset(Variant))]
                 fn name(&self) -> &'static str;
@@ -326,6 +347,8 @@ mod tests {
                 fn able(&self) -> bool;
                 #[enumtrait::Enum(default(GroceryBag::Plastic))]
                 fn bag(&self) -> GroceryBag;
+                #[enumtrait::Rel(relationship(ManyToOne))]
+                fn parent(&self) -> Self::ParentEnum;
                 // test default implementation
                 fn something_default(&self) {
                     todo!("done");
@@ -347,8 +370,9 @@ mod tests {
                 #[traitenum(able(false))]
                 Three,
                 #[traitenum(bag(GroceryBag::Paper))]
-                Four
-                
+                Four,
+                #[traitenum(relationship(ManyToOne))]
+                Five
             }
         };
 
@@ -356,32 +380,13 @@ mod tests {
         let enum_model = super::parse_traitenum_macro(item_src, &model_bytes).unwrap().model;
         dbg!(&enum_model);
 
-        macro_rules! assert_variant_val {
-            ($variant_name:literal, $attribute_name:literal, $value_type:ident, $expected:expr) => {
-                match enum_model.variant($variant_name).unwrap().value($attribute_name).unwrap().value() {
-                    model::Value::$value_type(ref val) => assert_eq!($expected, *val),
-                    _ => assert!(false, "Incorrect value type for attribute: $attribute_name")
-                }
-            };
-        }
-
-        macro_rules! assert_variant_enumval {
-            ($variant_name:literal, $attribute_name:literal, $expected:literal) => {
-                match enum_model.variant($variant_name).unwrap().value($attribute_name).unwrap().value() {
-                    model::Value::EnumVariant(ref val) => assert_eq!($expected, val.to_string()),
-                    _ => assert!(false, "Incorrect value type for attribute: $attribute_name")
-                }
-            };
-        }
-
-
-        assert_variant_val!("One", "name", StaticStr, "One");
-        assert_variant_val!("Two", "column", UnsignedSize, 44);
-        assert_variant_val!("Two", "name", StaticStr, "2");
-        assert_variant_val!("Three", "serial", UnsignedInteger64, 7);
-        assert_variant_val!("Three", "able", Bool, false);
-        assert_variant_enumval!("Three", "bag", "GroceryBag::Plastic");
-        assert_variant_enumval!("Four", "bag", "GroceryBag::Paper");
+        assert_traitenum_value!(enum_model, "One", "name", StaticStr, "One");
+        assert_traitenum_value!(enum_model, "Two", "column", UnsignedSize, 44);
+        assert_traitenum_value!(enum_model, "Two", "name", StaticStr, "2");
+        assert_traitenum_value!(enum_model, "Three", "serial", UnsignedInteger64, 7);
+        assert_traitenum_value!(enum_model, "Three", "able", Bool, false);
+        assert_traitenum_value_enum!(enum_model, "Three", "bag", "GroceryBag::Plastic");
+        assert_traitenum_value_enum!(enum_model, "Four", "bag", "GroceryBag::Paper");
     }
 
     #[test]

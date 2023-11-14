@@ -66,28 +66,14 @@ pub(crate) fn parse_attribute_definition(
             attr.path().to_token_stream().to_string())
     }
 
-    let attribute_def_name = attr.path().segments.last()
+    let definition_name = attr.path().segments.last()
         .ok_or(mksynerr!(span,
             "Empty helper attribute definition name. Format: {}::DefinitionName",
             TRAIT_ATTRIBUTE_HELPER_NAME))?.ident.to_string();
 
-    let mut def = model::AttributeDefinition::try_from((return_type, return_type_id))
+    let mut def = model::AttributeDefinition::partial(Some(&definition_name), return_type, return_type_id)
         .map_err(|e| mksynerr!(span, "Unable to parse return type for definition `{}` :: {}",
             attr.path().to_token_stream().to_string(), e))?;
-
-    // for Type-based definitions, we further constraint the definition 
-    match def {
-        model::AttributeDefinition::Type(typedef) => {
-            match attribute_def_name.as_str() {
-                "Enum" => {
-                    def = model::AttributeDefinition::FieldlessEnum(
-                        FieldlessEnumAttributeDefinition::new(typedef.identifier));
-                },
-                _ => synerr!(span, "Mismatched definition type for Type return type: {}", attribute_def_name)
-            }
-        },
-        _ => ()
-    }
 
     attr.parse_nested_meta(|meta| {
         let name = meta.path.get_ident()
@@ -98,16 +84,18 @@ pub(crate) fn parse_attribute_definition(
         let content;
         syn::parenthesized!(content in meta.input);
 
-        match attribute_def_name.as_str() {
-            "Bool" =>  
+        match definition_name.as_str() {
+            model::BoolAttributeDefinition::DEFINITION_NAME =>  
                 parse_bool_attribute_definition(&mut def, &name, content, span, return_type)?,
-            "Str" => 
+            model::StaticStrAttributeDefinition::DEFINITION_NAME => 
                 parse_string_attribute_definition(&mut def, &name, content, span, return_type)?,
-            "Num" => 
+            model::NumberAttributeDefinition::<usize>::DEFINITION_NAME => 
                 parse_number_attribute_definition(&mut def, &name, content, span, return_type)?,
-            "Enum" =>
+            model::FieldlessEnumAttributeDefinition::DEFINITION_NAME =>
                 parse_enum_attribute_definition(&mut def, &name, content, span, return_type)?,
-            _ => synerr!(span, "Unknown attribute definition: {}", attribute_def_name)
+            model::RelationAttributeDefinition::DEFINITION_NAME =>
+                parse_relation_attribute_definition(&mut def, &name, content, span, return_type)?,
+             _ => synerr!(span, "Unknown attribute definition: {}", definition_name)
 
         };
 
@@ -116,6 +104,9 @@ pub(crate) fn parse_attribute_definition(
 
     Ok(def)
 }
+
+const DEFINITION_DEFAULT: &'static str = "default";
+const DEFINITION_PRESET: &'static str = "preset";
 
 fn parse_bool_attribute_definition(
         def: &mut model::AttributeDefinition,
@@ -129,7 +120,7 @@ fn parse_bool_attribute_definition(
     };
 
     match name {
-       "default" => {
+       DEFINITION_DEFAULT => {
             booldef.default = Some(content.parse::<syn::LitBool>()?.value())
        },
        _ => synerr!(span, "Unknown attribute definition property: {}", name)
@@ -150,7 +141,7 @@ fn parse_enum_attribute_definition(
     };
 
     match name {
-       "default" => {
+       DEFINITION_DEFAULT => {
             let id: model::Identifier = content.parse()?;
             enumdef.default = Some(id)
        },
@@ -172,10 +163,10 @@ fn parse_string_attribute_definition(
     };
 
     match name {
-       "default" => {
+       DEFINITION_DEFAULT => {
             strdef.default = Some(content.parse::<syn::LitStr>()?.value())
        },
-       "preset" => {
+       DEFINITION_PRESET => {
             let variant_name = content.parse::<syn::Ident>()?.to_string();
             let preset = model::StringPreset::from_str(&variant_name)
                 .or(Err(mksynerr!(span, "Unknown String preset: {}", variant_name)))?;
@@ -186,6 +177,35 @@ fn parse_string_attribute_definition(
 
     Ok(())
 }
+
+const DEFINITION_RELATIONSHIP: &'static str = "relationship";
+
+fn parse_relation_attribute_definition(
+        def: &mut model::AttributeDefinition,
+        name: &str,
+        content: syn::parse::ParseBuffer,
+        span: proc_macro2::Span,
+        _return_type: model::ReturnType) -> Result<(), syn::Error> {
+    let reldef = match def {
+        model::AttributeDefinition::Relation(def) => def,
+        _ => unreachable!("Unexpected definition type: {}", model::RelationAttributeDefinition::DEFINITION_NAME)
+    };
+
+    match name {
+       DEFINITION_RELATIONSHIP => {
+            let variant_name = content.parse::<syn::Ident>()?.to_string();
+            let relationship = model::Relationship::from_str(&variant_name)
+                .or(Err(mksynerr!(span, "Unknown relationship: {}", variant_name)))?;
+            reldef.relationship = Some(relationship);
+       },
+       _ => synerr!(
+                span, "Unknown property for definition {}: {}",
+                model::RelationAttributeDefinition::DEFINITION_NAME, name)
+    }
+
+    Ok(())
+}
+
 
 fn parse_number_attribute_definition(
         def: &mut model::AttributeDefinition,
@@ -205,6 +225,9 @@ fn parse_number_attribute_definition(
         _ => synerr!(span, "Mismatched definition for Num: {}", name)
     }
 }
+
+const DEFINITION_START: &'static str = "start";
+const DEFINITION_INCREMENT: &'static str = "increment";
  
 fn parse_number_definition<N>(
         def: &mut model::NumberAttributeDefinition<N>,
@@ -228,21 +251,21 @@ where
     }
 
     match name {
-       "default" => {
+       DEFINITION_DEFAULT => {
             let n: N = parsenum!();
             def.default = Some(n)
        },
-       "preset" => {
+       DEFINITION_PRESET => {
             let variant_name = content.parse::<syn::Ident>()?.to_string();
             let preset = model::NumberPreset::from_str(&variant_name)
                 .or(Err(mksynerr!(span, "Unknown definition preset for Num: {}", variant_name)))?;
             def.preset = Some(preset);
        },
-       "start" => {
+       DEFINITION_START => {
             let n: N = parsenum!();
             def.start = Some(n)
        },
-       "increment" => {
+       DEFINITION_INCREMENT => {
             let n: N = parsenum!();
             def.increment = Some(n)
        },
@@ -296,7 +319,8 @@ pub(crate) fn parse_variant(variant_name: &str, attr: &syn::Attribute, model: &m
                 content.parse::<syn::LitByte>()?.value()),
             model::AttributeDefinition::FieldlessEnum(_) => model::Value::EnumVariant(
                 content.parse::<model::Identifier>()?),
-            model::AttributeDefinition::Relation(_) => todo!(),
+            model::AttributeDefinition::Relation(_) => model::Value::Relation(
+                content.parse::<model::Identifier>()?),
             model::AttributeDefinition::Type(_) => model::Value::Type(
                 content.parse::<model::Identifier>()?),
         };

@@ -64,6 +64,24 @@ pub enum ReturnType {
     Type,
 }
 
+impl Display for ReturnType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ReturnType::Bool => write!(f, "bool"),
+            ReturnType::StaticStr => write!(f, "&'static str"),
+            ReturnType::UnsignedSize => write!(f, "usize"),
+            ReturnType::UnsignedInteger64 => write!(f, "u64"),
+            ReturnType::Integer64 => write!(f, "u64"),
+            ReturnType::Float64 => write!(f, "f64"),
+            ReturnType::UnsignedInteger32 => write!(f, "u32"),
+            ReturnType::Integer32 => write!(f, "i32"),
+            ReturnType::Float32 => write!(f, "f32"),
+            ReturnType::Byte => write!(f, "u8"),
+            ReturnType::Type => write!(f, "<Type>"),
+        }
+    }
+}
+
 impl FromStr for ReturnType {
     type Err = ();
 
@@ -102,6 +120,79 @@ pub enum AttributeDefinition {
 }
 
 impl AttributeDefinition {
+    pub fn partial(definition_name: Option<&str>, return_type: ReturnType, return_identifier: Option<Identifier>)
+            -> Result<Self, String> {
+
+        macro_rules! chk_defname {
+            ($expected:path) => {
+               if let Some(defname) = definition_name {
+                    if (defname != $expected) {
+                        return Err(format!("Definition type `{}` is incompatible with return type `{}`",
+                            defname, return_type))
+                    }
+                } 
+            };
+        }
+
+        let result = match return_type {
+            ReturnType::Bool => {
+                chk_defname!(BoolAttributeDefinition::DEFINITION_NAME);
+                AttributeDefinition::Bool(BoolAttributeDefinition::new())
+            },
+            ReturnType::StaticStr => {
+                chk_defname!(StaticStrAttributeDefinition::DEFINITION_NAME);
+                AttributeDefinition::StaticStr(StaticStrAttributeDefinition::new())
+            },
+            ReturnType::UnsignedSize => {
+                chk_defname!(NumberAttributeDefinition::<usize>::DEFINITION_NAME);
+                AttributeDefinition::UnsignedSize(NumberAttributeDefinition::new())
+            },
+            ReturnType::UnsignedInteger64 => {
+                chk_defname!(NumberAttributeDefinition::<u64>::DEFINITION_NAME);
+                AttributeDefinition::UnsignedInteger64(NumberAttributeDefinition::new())
+            },
+            ReturnType::Integer64 => {
+                chk_defname!(NumberAttributeDefinition::<i64>::DEFINITION_NAME);
+                AttributeDefinition::Integer64(NumberAttributeDefinition::new())
+            },
+            ReturnType::Float64 => {
+                chk_defname!(NumberAttributeDefinition::<f64>::DEFINITION_NAME);
+                AttributeDefinition::Float64(NumberAttributeDefinition::new())
+            },
+            ReturnType::UnsignedInteger32 => {
+                chk_defname!(NumberAttributeDefinition::<u32>::DEFINITION_NAME);
+                AttributeDefinition::UnsignedInteger32(NumberAttributeDefinition::new())
+            },
+            ReturnType::Integer32 => {
+                chk_defname!(NumberAttributeDefinition::<i32>::DEFINITION_NAME);
+                AttributeDefinition::Integer32(NumberAttributeDefinition::new())
+            },
+            ReturnType::Float32 => {
+                chk_defname!(NumberAttributeDefinition::<f32>::DEFINITION_NAME);
+                AttributeDefinition::Float32(NumberAttributeDefinition::new())
+            },
+            ReturnType::Byte => {
+                chk_defname!(NumberAttributeDefinition::<u8>::DEFINITION_NAME);
+                AttributeDefinition::Byte(NumberAttributeDefinition::new())
+            },
+            ReturnType::Type => {
+                let id = return_identifier.ok_or("Missing Identifier for ReturnType::Type")?;
+                match definition_name {
+                    Some("Enum") => AttributeDefinition::FieldlessEnum(FieldlessEnumAttributeDefinition::new(id)),
+                    Some("Rel") => AttributeDefinition::Relation(RelationAttributeDefinition::new(id)),
+                    Some(s) => {
+                        return Err(format!(
+                            "Definition type `{}` is incompatible with return type `{}`",
+                            s, return_type)) 
+                    },
+                    None => AttributeDefinition::Type(TypeAttributeDefinition::new(id))
+                }
+            },
+        };
+
+        Ok(result)
+    }
+
     pub fn has_default(&self) -> bool {
         match self {
             AttributeDefinition::Bool(booldef) => booldef.default.is_some(),
@@ -260,32 +351,9 @@ impl AttributeDefinition {
             AttributeDefinition::Float32(numdef) => numdef.validate(),
             AttributeDefinition::Byte(numdef) => numdef.validate(),
             AttributeDefinition::FieldlessEnum(enumdef) => enumdef.validate(),
-            AttributeDefinition::Relation(_) => todo!(),
-            AttributeDefinition::Type(_) => todo!(),
+            AttributeDefinition::Relation(reldef) => reldef.validate(),
+            AttributeDefinition::Type(_) => unreachable!("Type definitions should not be directly accessible"),
         }
-    }
-}
-
-impl TryFrom<(ReturnType, Option<Identifier>)> for AttributeDefinition {
-    type Error = String;
-
-    fn try_from(value: (ReturnType, Option<Identifier>)) -> Result<Self, Self::Error> {
-        Ok(match value.0 {
-            ReturnType::Bool => AttributeDefinition::Bool(BoolAttributeDefinition::new()),
-            ReturnType::StaticStr => AttributeDefinition::StaticStr(StaticStrAttributeDefinition::new()),
-            ReturnType::UnsignedSize => AttributeDefinition::UnsignedSize(NumberAttributeDefinition::new()),
-            ReturnType::UnsignedInteger64 => AttributeDefinition::UnsignedInteger64(NumberAttributeDefinition::new()),
-            ReturnType::Integer64 => AttributeDefinition::Integer64(NumberAttributeDefinition::new()),
-            ReturnType::Float64 => AttributeDefinition::Float64(NumberAttributeDefinition::new()),
-            ReturnType::UnsignedInteger32 => AttributeDefinition::UnsignedInteger32(NumberAttributeDefinition::new()),
-            ReturnType::Integer32 => AttributeDefinition::Integer32(NumberAttributeDefinition::new()),
-            ReturnType::Float32 => AttributeDefinition::Float32(NumberAttributeDefinition::new()),
-            ReturnType::Byte => AttributeDefinition::Byte(NumberAttributeDefinition::new()),
-            ReturnType::Type => {
-                let id = value.1.ok_or("Missing Identifier for ReturnType::Type")?;
-                AttributeDefinition::Type(TypeAttributeDefinition::new(id))
-            },
-        })
     }
 }
 
@@ -295,6 +363,8 @@ pub struct BoolAttributeDefinition {
 }
 
 impl BoolAttributeDefinition {
+    const DEFINITION_NAME: &'static str = "Bool";
+
     pub fn new() -> Self {
         Self {
             default: None
@@ -306,8 +376,6 @@ impl BoolAttributeDefinition {
     }
 }
 
-
-
 #[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct NumberAttributeDefinition<N> {
     pub(crate) default: Option<N>,
@@ -317,6 +385,8 @@ pub struct NumberAttributeDefinition<N> {
 }
 
 impl<N> NumberAttributeDefinition<N> {
+    const DEFINITION_NAME: &'static str = "Num";
+
     pub fn new() -> Self {
         Self {
             default: None,
@@ -388,6 +458,8 @@ pub struct StaticStrAttributeDefinition {
 }
 
 impl StaticStrAttributeDefinition {
+    const DEFINITION_NAME: &'static str = "Str";
+
     pub fn new() -> Self {
         Self {
             default: None,
@@ -403,6 +475,8 @@ pub struct FieldlessEnumAttributeDefinition {
 }
 
 impl FieldlessEnumAttributeDefinition {
+    const DEFINITION_NAME: &'static str = "Enum";
+
     pub fn new(identifier: Identifier) -> Self {
         Self {
             identifier,
@@ -430,16 +504,73 @@ impl TypeAttributeDefinition {
 
 
 #[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize)]
-pub enum RelationshipType {
+pub enum Relationship {
     OneToOne,
     OneToMany,
     ManyToOne
 }
 
+impl FromStr for Relationship {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "one_to_one" | "one-to-one" | "OnetoOne" | "ONE_TO_ONE" => Ok(Self::OneToOne),
+            "one_to_many" | "one-to-many" | "OneToMany" | "ONE_TO_MANY" => Ok(Self::OneToMany),
+            "many_to_one" | "many-to-one" | "ManyToOne" | "MANY_TO_ONE" => Ok(Self::ManyToOne),
+            _ => Err(())
+        }
+    }
+}
+
 #[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct RelationAttributeDefinition {
-    enumtrait_identifier: Identifier,
-    relationship_type: RelationshipType
+    identifier: Identifier,
+    relationship: Option<Relationship>,
+    //one: Option<Identifier>,
+    //many: Option<Identifier>
+}
+
+impl RelationAttributeDefinition {
+    const DEFINITION_NAME: &'static str = "Rel";
+
+    pub fn new(identifier: Identifier) -> Self {
+        Self {
+            identifier,
+            relationship: None,
+            //one: None,
+            //many: None
+        }
+    }
+
+    pub fn validate(&self) -> Result<(), &str> {
+        match self.relationship {
+            /*Some(Relationship::OneToOne) => {
+                if self.one.is_none() {
+                    return Err("Missing property for One-to-One Rel definition: one")
+                } else if self.many.is_some() {
+                    return Err("Unusuable property for One-to-One Rel definition: many")
+                }
+            },
+            Some(Relationship::OneToMany) => {
+                if self.many.is_none() {
+                    return Err("Missing property for One-to-Many Rel definition: many")
+                } else if self.one.is_some() {
+                    return Err("Unusable property for One-to-One Rel definition: one")
+                }
+            },
+            Some(Relationship::ManyToOne) => {
+                if self.one.is_none() {
+                    return Err("Missing property for Many-to-One Rel definition: one")
+                } else if self.many.is_some() {
+                    return Err("Unusuable property for Many-to-One Rel definition: many")
+                }
+
+            },*/
+            Some(_) => Ok(()),
+            None => return Err("Missing property for Rel definition: relationship")
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -491,6 +622,7 @@ pub enum Value {
     UnsignedSize(usize),
     Byte(u8),
     EnumVariant(Identifier),
+    Relation(Identifier),
     Type(Identifier),
 }
 

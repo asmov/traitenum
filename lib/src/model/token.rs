@@ -18,6 +18,7 @@ impl quote::ToTokens for model::AttributeValue {
                 model::Value::Float32(n) => quote::quote!(#n),
                 model::Value::Byte(n) => quote::quote!(#n),
                 model::Value::EnumVariant(id) => id.to_token_stream(),
+                model::Value::Relation(id) => id.to_token_stream(),
                 model::Value::Type(id) => id.to_token_stream(),
             }
         );
