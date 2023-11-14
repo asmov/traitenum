@@ -44,6 +44,8 @@ fn parse_enumtrait_macro(attr: proc_macro2::TokenStream, item: proc_macro2::Toke
     }
 
     let mut methods: Vec<model::Method> = Vec::new(); 
+    let mut partial_types: Vec<model::AssociatedTypePartial> = Vec::new();
+    let mut types: Vec<model::AssociatedType> = Vec::new();
 
     for trait_item in &item.items {
         let span = trait_item.span();
@@ -147,14 +149,67 @@ fn parse_enumtrait_macro(attr: proc_macro2::TokenStream, item: proc_macro2::Toke
                 methods.push(method);
                 
             },
-            syn::TraitItem::Type(_) => {
-                todo!("type")
+            syn::TraitItem::Type(type_item) => {
+                let type_identifier = model::Identifier::from(&type_item.ident);
+                if type_item.bounds.len() != 1 {
+                    synerr!(span, "Unsupported trait bounds for associated type: {}", type_identifier.name())
+                }
+
+                let trait_identifier = match type_item.bounds.first().unwrap() {
+                    syn::TypeParamBound::Trait(trait_bound) => model::Identifier::from(&trait_bound.path),
+                    syn::TypeParamBound::Lifetime(_) => 
+                        synerr!(span, "Unsupported trait bounds for associated type: {}", type_identifier.name()),
+                    syn::TypeParamBound::Verbatim(_) => 
+                        synerr!(span, "Unsupported trait bounds for associated type: {}", type_identifier.name()),
+                    _ =>
+                        synerr!(span, "Unsupported trait bounds for associated type: {}", type_identifier.name())
+                };
+
+                let partial_associated_type = model::AssociatedTypePartial{
+                    name: type_identifier.name().to_owned(),
+                    trait_identifier,
+                    matched: false
+                };
+
+                partial_types.push(partial_associated_type);
             },
             syn::TraitItem::Macro(_) => {},
             syn::TraitItem::Verbatim(_) => {},
             syn::TraitItem::Const(_) => {},
             _ => () 
         }
+    }
+
+    // match partially constructed associated types to relation methods and finalize
+    for method in &methods {
+        let relation_def = match method.attribute_definition() {
+            model::AttributeDefinition::Relation(reldef) => reldef,
+            _ => continue
+        };
+
+        let method_return_id = relation_def.identifier();
+        let partial_type_result = partial_types.iter_mut()
+            .filter(|t| !t.matched)
+            .find(|t| t.name == method_return_id.name());
+
+        let partial_type = match partial_type_result {
+            Some(t) => t,
+            None => synerr!(item.span(),
+                "Unable to find a associated type for relationship definition: {}", method.name())
+        };
+
+        let associated_type = model::AssociatedType::new(
+            partial_type.name.to_owned(),
+            method.name().to_owned(),
+            partial_type.trait_identifier.to_owned());
+
+        types.push(associated_type);
+        partial_type.matched = true;
+    }
+
+    // if there are remaining unmatched associated types, error out
+    if let Some(unmatched_type) = partial_types.iter().find(|t| !t.matched) {
+        synerr!(item.span(), "No matching relationship definition for associated type: {}", unmatched_type.name);
     }
 
     // strip out all #enumtrait helper attributes
@@ -185,7 +240,7 @@ fn parse_enumtrait_macro(attr: proc_macro2::TokenStream, item: proc_macro2::Toke
 
     Ok(EnumTraitMacroOutput {
         tokens: item.to_token_stream(),
-        model: model::EnumTrait::new(identifier, methods)
+        model: model::EnumTrait::new(identifier, methods, types)
     })
 }
 
@@ -363,6 +418,7 @@ mod tests {
         assert_eq!("MyTrait", model.identifier().name());
 
         let item_src = quote::quote!{
+            //#[traitenum(parent(OtherEnum))]
             enum MyEnum {
                 One,
                 #[traitenum(name("2"))]
@@ -371,8 +427,6 @@ mod tests {
                 Three,
                 #[traitenum(bag(GroceryBag::Paper))]
                 Four,
-                #[traitenum(relationship(ManyToOne))]
-                Five
             }
         };
 

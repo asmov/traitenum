@@ -7,8 +7,6 @@ use syn::{self, parse};
 use crate::model;
 use crate::{synerr, mksynerr, TRAIT_ATTRIBUTE_HELPER_NAME};
 
-use super::FieldlessEnumAttributeDefinition;
-
 const ERROR_PREFIX: &'static str = "traitenum: ";
 
 impl parse::Parse for model::Identifier {
@@ -27,19 +25,16 @@ impl From<&syn::Ident> for model::Identifier{
     }
 }
 
-impl TryFrom<&syn::Path> for model::Identifier{
-    type Error = ();
-
-    fn try_from(path: &syn::Path) -> Result<Self, Self::Error> {
+impl From<&syn::Path> for model::Identifier{
+    fn from(path: &syn::Path) -> Self {
         let mut path = path.clone();
-        let name = path.segments.pop()
-            .ok_or(())?
+        let name = path.segments.pop().unwrap()
             .value().ident.to_string();
         let path = path.segments.pairs()
             .map(|pair| pair.value().ident.to_string())
             .collect();
 
-        Ok(Self::new(path, name))
+        Self::new(path, name)
     }
 }
 

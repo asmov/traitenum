@@ -7,17 +7,20 @@ pub mod token;
 #[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct EnumTrait {
     identifier: Identifier,
-    methods: Vec<Method>
+    methods: Vec<Method>,
+    types: Vec<AssociatedType>
 }
 
 impl EnumTrait {
     pub fn identifier(&self) -> &Identifier { &self.identifier }
     pub fn methods(&self) -> &[Method] { &self.methods }
+    pub fn types(&self) -> &[AssociatedType] { &self.types }
 
-    pub const fn new(identifier: Identifier, methods: Vec<Method>) -> Self {
+    pub const fn new(identifier: Identifier, methods: Vec<Method>, types: Vec<AssociatedType>) -> Self {
         Self {
             identifier,
-            methods
+            methods,
+            types: types
         }
     }
 }
@@ -45,6 +48,37 @@ impl Display for Identifier {
         let mut path = self.path.clone();
         path.push(self.name.to_owned());
         write!(f, "{}", path.join("::"))
+    }
+}
+
+pub(crate) struct AssociatedTypePartial {
+    pub(crate) name: String,
+    pub(crate) trait_identifier: Identifier,
+    pub(crate) matched: bool
+}
+
+#[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct AssociatedType {
+    name: String,
+    relation_name: String,
+    trait_identifier: Identifier
+}
+
+impl AssociatedType {
+    pub fn name(&self) -> &str { &self.name }
+    pub fn relation_name(&self) -> &str { &self.relation_name }
+    pub fn trait_identifier(&self) -> &Identifier { &self.trait_identifier }
+
+    pub fn valid_return_type_id(identifier: &Identifier) -> bool {
+        identifier.path.len() == 1 && identifier.path[1] == "Self"
+    }
+
+    pub const fn new(name: String, relation_name: String, trait_identifier: Identifier) -> Self {
+        Self {
+            name,
+            relation_name: relation_name,
+            trait_identifier
+        }
     }
 }
 
@@ -533,6 +567,8 @@ pub struct RelationAttributeDefinition {
 
 impl RelationAttributeDefinition {
     const DEFINITION_NAME: &'static str = "Rel";
+
+    pub fn identifier(&self) -> &Identifier { &self.identifier }
 
     pub fn new(identifier: Identifier) -> Self {
         Self {
