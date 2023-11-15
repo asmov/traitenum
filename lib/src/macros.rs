@@ -264,6 +264,9 @@ fn parse_traitenum_macro(
 
     let item: syn::DeriveInput = syn::parse2(item)?;
     let span = item.span();
+
+    //TODO: parse top-level attributes (item.attr) -> #[traitenum(<relation name>(<trait path>))]
+
     let data_enum: &syn::DataEnum = match item.data {
         syn::Data::Enum(ref data_enum) => data_enum,
         _ => synerr!(span, "Only enums are supported for #[{}]", ENUM_ATTRIBUTE_HELPER_NAME)
@@ -385,28 +388,33 @@ mod tests {
 
         let item_src = quote::quote!{
             pub trait MyTrait {
-                type ParentEnum: MyTrait;
+                // test Rel many-to-one
+                type ManyToOneEnum: OtherTrait;
 
-                // test preset variant parsing
-                #[enumtrait::Str(preset(Variant))]
-                fn name(&self) -> &'static str;
-                // test default parsing
+                // test Str default
                 #[enumtrait::Str(default(":)"))]
-                fn emote(&self) -> &'static str;
-                // test ordinal
+                fn str_default(&self) -> &'static str;
+                // test Num default
                 #[enumtrait::Num(default(44))]
-                fn column(&self) -> usize;
-                #[enumtrait::Num(preset(Serial), start(3), increment(2))]
-                fn serial(&self) -> u64;
+                fn num_default(&self) -> usize;
+               // test Bool default
                 #[enumtrait::Bool(default(true))]
-                fn able(&self) -> bool;
-                #[enumtrait::Enum(default(GroceryBag::Plastic))]
-                fn bag(&self) -> GroceryBag;
+                fn bool_default(&self) -> bool;
+                // test Enum default
+                #[enumtrait::Enum(default(RPS::Rock))]
+                fn enum_default(&self) -> RPS;
+                // test Str variant preset
+                #[enumtrait::Str(preset(Variant))]
+                fn str_preset_variant(&self) -> &'static str;
+                // test Num serial preset w/start and increment 
+                #[enumtrait::Num(preset(Serial), start(3), increment(2))]
+                fn num_preset_serial_all(&self) -> u64;
+                // test Rel many-to-one
                 #[enumtrait::Rel(relationship(ManyToOne))]
-                fn parent(&self) -> Self::ParentEnum;
+                fn many_to_one(&self) -> Self::ManyToOneEnum;
                 // test default implementation
-                fn something_default(&self) {
-                    todo!("done");
+                fn default_implementation(&self) {
+                    todo!();
                 }
             }
         };
@@ -421,11 +429,11 @@ mod tests {
             //#[traitenum(parent(OtherEnum))]
             enum MyEnum {
                 One,
-                #[traitenum(name("2"))]
+                #[traitenum(str_preset_variant("2"))]
                 Two,
-                #[traitenum(able(false))]
+                #[traitenum(bool_default(false))]
                 Three,
-                #[traitenum(bag(GroceryBag::Paper))]
+                #[traitenum(enum_default(RPS::Scissors))]
                 Four,
             }
         };
@@ -434,13 +442,13 @@ mod tests {
         let enum_model = super::parse_traitenum_macro(item_src, &model_bytes).unwrap().model;
         dbg!(&enum_model);
 
-        assert_traitenum_value!(enum_model, "One", "name", StaticStr, "One");
-        assert_traitenum_value!(enum_model, "Two", "column", UnsignedSize, 44);
-        assert_traitenum_value!(enum_model, "Two", "name", StaticStr, "2");
-        assert_traitenum_value!(enum_model, "Three", "serial", UnsignedInteger64, 7);
-        assert_traitenum_value!(enum_model, "Three", "able", Bool, false);
-        assert_traitenum_value_enum!(enum_model, "Three", "bag", "GroceryBag::Plastic");
-        assert_traitenum_value_enum!(enum_model, "Four", "bag", "GroceryBag::Paper");
+        assert_traitenum_value!(enum_model, "One", "str_default_preset", StaticStr, "One");
+        assert_traitenum_value!(enum_model, "Two", "num_default", UnsignedSize, 44);
+        assert_traitenum_value!(enum_model, "Two", "str_default_preset", StaticStr, "2");
+        assert_traitenum_value!(enum_model, "Three", "num_preset_serial_all", UnsignedInteger64, 7);
+        assert_traitenum_value!(enum_model, "Three", "enum_default", Bool, false);
+        assert_traitenum_value_enum!(enum_model, "Three", "enum_default", "RPS::Rock");
+        assert_traitenum_value_enum!(enum_model, "Four", "enum_default", "RPS::Scissors");
     }
 
     #[test]

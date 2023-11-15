@@ -1,5 +1,6 @@
 use traitenum_test_exporter_macro as traitmacro;
 use traitenum_test_exporter_traits::SimpleTrait;
+use traitenum_test_exporter_traits::ChildTrait;
 
 #[derive(traitmacro::SimpleTraitEnum)]
 pub enum ImporterEnum {
@@ -9,6 +10,14 @@ pub enum ImporterEnum {
     Bravo,
     #[traitenum(name("charles"), column(4))]
     Charlie
+}
+
+#[derive(traitmacro::ChildTraitEnum)]
+#[traitenum(parent(ImporterParentEnum))]
+pub enum ImporterChildEnum {
+    One,
+    Two,
+    Three
 }
 
 #[cfg(test)]
