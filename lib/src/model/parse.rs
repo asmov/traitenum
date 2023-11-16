@@ -271,15 +271,16 @@ where
 }
 
 pub(crate) fn parse_variant(variant_name: &str, attr: &syn::Attribute, model: &model::EnumTrait)
-        -> Result<model::Variant, syn::Error> {
-    let mut variant = model::Variant::partial(variant_name.to_owned());
+        -> Result<model::VariantBuilder, syn::Error> {
+    let mut variant_build = model::VariantBuilder::new();
+    variant_build.name(variant_name.to_owned());
     attr.parse_nested_meta(|meta| {
         let attr_name = meta.path.get_ident()
             .ok_or(mksynerr!(attr.span(), "Invalid enum attribute: `{}`",
                 meta.path.to_token_stream().to_string()))?
             .to_string();
 
-        if variant.has(&attr_name) {
+        if variant_build.has_value(&attr_name) {
             synerr!(attr.span(), "Duplicate enum attribute value for: {}", attr_name);
         }
 
@@ -321,11 +322,11 @@ pub(crate) fn parse_variant(variant_name: &str, attr: &syn::Attribute, model: &m
         };
 
         let attribute_value = model::AttributeValue::new(value);
-        variant.set_value(attr_name, attribute_value);
+        variant_build.value(attr_name, attribute_value);
 
         Ok(())
     })?;
 
-    Ok(variant)
+    Ok(variant_build)
 }
 

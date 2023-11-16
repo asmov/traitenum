@@ -275,7 +275,9 @@ fn parse_traitenum_macro(
     let trait_ident = syn::Ident::new(model.identifier().name(), item.span());
     let item_ident = &item.ident;
 
-    let mut trait_enum = model::TraitEnum::partial(model::Identifier::from(&item.ident));
+    let mut traitenum_build = model::TraitEnumBuilder::new();
+    traitenum_build.identifier(model::Identifier::from(&item.ident));
+    //let mut trait_enum = model::TraitEnum::partial(model::Identifier::from(&item.ident));
 
     // parse enum attribute values, if provided
     let mut ordinal: usize = 0;
@@ -286,30 +288,33 @@ fn parse_traitenum_macro(
             .find(|a| a.path().segments.first()
                 .is_some_and(|s| ENUM_ATTRIBUTE_HELPER_NAME == s.ident.to_string()));
 
-        let mut variant = if let Some(attribute) = attribute {
+        let mut variant_build = if let Some(attribute) = attribute {
             parse::parse_variant(&variant_name, attribute, &model)?
         } else {
-            model::Variant::partial(variant_name.to_owned())
+            let mut build = model::VariantBuilder::new();
+            build.name(variant_name.to_owned());
+            build
         };
 
         // set attribute value defaults. throw errors where values are required, but not provided
         for method in model.methods() {
             let method_name = method.name();
-            if variant.has(method_name) {
+            if variant_build.has_value(method_name) {
                 continue;
             } else if !method.attribute_definition().has_default_or_preset() {
                 synerr!(span, "Missing value for attribute `{}`: {}", method_name, variant_name);
             } else {
                 let value = method.attribute_definition().default_or_preset(&variant_name, ordinal).unwrap();
-                variant.set_value(method_name.to_string(), model::AttributeValue::new(value));
+                variant_build.value(method_name.to_string(), model::AttributeValue::new(value));
 
             }
         }
 
-        trait_enum.push_variant(variant);
+        traitenum_build.push_variant(variant_build.build());
         ordinal += 1;
     }
 
+    let trait_enum = traitenum_build.build(); 
 
     // write a method for each one defined by the enum trait, which returns the value defined by each enum variant
     let method_outputs = model.methods().iter().map(|method| {

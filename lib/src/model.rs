@@ -1,4 +1,5 @@
-use std::{fmt::Display, str::FromStr, collections::HashMap};
+use std::{fmt::Display, str::FromStr, collections::HashMap, collections::hash_map};
+
 use serde;
 
 pub mod parse;
@@ -674,6 +675,46 @@ pub struct TraitEnum {
     variants: Vec<Variant>
 }
 
+pub(crate) struct TraitEnumBuilder {
+    identifier: Option<Identifier>,
+    variants: Option<Vec<Variant>>
+}
+
+impl TraitEnumBuilder {
+    pub(crate) fn new() -> Self {
+        Self {
+            identifier: None,
+            variants: None
+        }
+    }
+
+    pub(crate) fn identifier(&mut self, identifier: Identifier) -> &mut Self {
+        self.identifier = Some(identifier);
+        self
+    }
+
+    pub(crate) fn push_variant(&mut self, variant: Variant) -> &mut Self {
+        if let Some(variants) = &mut self.variants {
+            variants.push(variant);
+        } else {
+            self.variants = Some(vec![variant]);
+        }
+
+        self
+    }
+
+    pub(crate) fn build(mut self) -> TraitEnum {
+        let identifier = self.identifier
+            .expect("Cannot build TraitEnum without an identifier");
+        let variants = self.variants.unwrap_or_else(|| Vec::new() );
+
+        TraitEnum::new(
+            identifier,
+            variants
+        )
+    }
+}
+
 impl TraitEnum {
     pub fn identifier(&self) -> &Identifier { &self.identifier }
     pub fn variants(&self) -> &[Variant] { &self.variants }
@@ -685,17 +726,6 @@ impl TraitEnum {
         }
     }
 
-    pub fn partial(identifier: Identifier) -> Self {
-        Self {
-            identifier,
-            variants: Vec::new()
-        }
-    }
-
-    pub fn push_variant(&mut self, variant: Variant) {
-        self.variants.push(variant);
-    }
-
     pub fn variant(&self, name: &str) -> Option<&Variant> {
         self.variants.iter().find(|v| name == v.name )
     }
@@ -704,40 +734,83 @@ impl TraitEnum {
 #[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Variant {
     name: String,
-    value_map: HashMap<String, AttributeValue>
+    named_values: HashMap<String, AttributeValue>
 }
 
 impl Variant {
     pub fn name(&self) -> &str { &self.name }
 
-    pub fn values(&self) -> std::collections::hash_map::Iter<'_, String, AttributeValue>{
-        self.value_map.iter()
+    pub fn values(&self) -> hash_map::Iter<'_, String, AttributeValue>{
+        self.named_values.iter()
     }
 
     pub fn new(name: String, value_map: HashMap<String, AttributeValue>) -> Self {
         Self {
             name,
-            value_map
+            named_values: value_map
         }
     }
 
-    pub fn partial(name: String) -> Self {
-        Self {
-            name,
-            value_map: HashMap::new()
-        }
-    }
-
-    pub fn has(&self, attribute_name: &str) -> bool {
-        self.value_map.contains_key(attribute_name)
-    }
-
-    pub fn set_value(&mut self, attribute_name: String, value: AttributeValue) {
-        self.value_map.insert(attribute_name, value);
+    pub fn has_value(&self, attribute_name: &str) -> bool {
+        self.named_values.contains_key(attribute_name)
     }
 
     pub fn value(&self, attribute_name: &str) -> Option<&AttributeValue> {
-        self.value_map.get(attribute_name)
+        self.named_values.get(attribute_name)
+    }
+
+}
+
+pub(crate) struct VariantBuilder {
+    name: Option<String>,
+    named_values: Option<HashMap<String, AttributeValue>>
+}
+
+impl VariantBuilder {
+    pub(crate) fn new() -> Self {
+        Self {
+            name: None,
+            named_values: None
+        }
+    }
+
+    pub(crate) fn name(&mut self, name: String) -> &mut Self {
+        self.name = Some(name);
+        self
+    }
+
+    pub(crate) fn has_value(&self, attribute_name: &str) -> bool {
+        if let Some(named_values) = &self.named_values {
+            named_values.contains_key(attribute_name)
+        } else {
+            false
+        }
+    }
+
+
+    pub(crate) fn value(&mut self, attribute_name: String, value: AttributeValue) -> &mut Self {
+        if let Some(named_values) = &mut self.named_values {
+            named_values.insert(attribute_name, value);
+        } else {
+            self.named_values = Some({
+                let mut map = HashMap::new();
+                map.insert(attribute_name, value);
+                map
+            });
+        }
+
+        self
+    }
+
+    pub(crate) fn build(self) -> Variant {
+        let name = self.name
+            .expect("Cannot build Variant without a name");
+        let named_values = self.named_values.unwrap_or_else(|| HashMap::new());
+
+        Variant::new(
+            name,
+            named_values
+        )
     }
 }
 
