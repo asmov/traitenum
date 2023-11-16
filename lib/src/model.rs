@@ -42,6 +42,15 @@ impl Identifier {
             name
         }
     }
+
+    pub fn base(&self) -> Option<Identifier> {
+        let mut path = self.path.clone();
+        if let Some(name) = path.pop() {
+            Some(Self::new(path, name))
+        } else {
+            None
+        }
+    }
 }
 
 impl Display for Identifier {
@@ -368,6 +377,20 @@ impl AttributeDefinition {
         }
     }
 
+    pub fn needs_value(&self) -> bool {
+        match self {
+            AttributeDefinition::Relation(ref reldef) => match &reldef.relationship {
+                Some(relationship) => match relationship {
+                    Relationship::OneToOne => false,
+                    Relationship::OneToMany => true,
+                    Relationship::ManyToOne => false,
+                },
+                None => true,
+            },
+            _ => true
+        }
+    }
+
     // Ensures that this definition is valid based return type, presets, etc.
     pub fn validate(&self) -> Result<(), &str> {
         if self.has_default() && self.has_preset() {
@@ -672,19 +695,22 @@ impl From<&[u8]> for EnumTrait {
 #[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct TraitEnum {
     identifier: Identifier,
-    variants: Vec<Variant>
+    variants: Vec<Variant>,
+    named_relation_enum_ids: HashMap<String, Identifier>
 }
 
 pub(crate) struct TraitEnumBuilder {
     identifier: Option<Identifier>,
-    variants: Option<Vec<Variant>>
+    variants: Option<Vec<Variant>>,
+    named_relation_enum_ids: Option<HashMap<String, Identifier>>
 }
 
 impl TraitEnumBuilder {
     pub(crate) fn new() -> Self {
         Self {
             identifier: None,
-            variants: None
+            variants: None,
+            named_relation_enum_ids: None
         }
     }
 
@@ -693,7 +719,7 @@ impl TraitEnumBuilder {
         self
     }
 
-    pub(crate) fn push_variant(&mut self, variant: Variant) -> &mut Self {
+    pub(crate) fn variant(&mut self, variant: Variant) -> &mut Self {
         if let Some(variants) = &mut self.variants {
             variants.push(variant);
         } else {
@@ -703,14 +729,38 @@ impl TraitEnumBuilder {
         self
     }
 
-    pub(crate) fn build(mut self) -> TraitEnum {
+    pub(crate) fn has_relation_enum(&self, relation_name: &str) -> bool {
+        if let Some(named_relation_enum_ids) = &self.named_relation_enum_ids {
+            named_relation_enum_ids.contains_key(relation_name)
+        } else {
+            false
+        }
+    }
+
+    pub(crate) fn relation_enum(&mut self, relation_name: String, enum_identifier: Identifier) -> &mut Self {
+        if let Some(named_relation_enum_ids) = &mut self.named_relation_enum_ids{
+            named_relation_enum_ids.insert(relation_name, enum_identifier);
+        } else {
+            self.named_relation_enum_ids = Some({
+                let mut map = HashMap::new();
+                map.insert(relation_name, enum_identifier);
+                map
+            });
+        }
+
+        self
+    }
+
+    pub(crate) fn build(self) -> TraitEnum {
         let identifier = self.identifier
             .expect("Cannot build TraitEnum without an identifier");
         let variants = self.variants.unwrap_or_else(|| Vec::new() );
+        let named_relation_enum_ids = self.named_relation_enum_ids.unwrap_or_else(|| HashMap::new() );
 
         TraitEnum::new(
             identifier,
-            variants
+            variants,
+            named_relation_enum_ids
         )
     }
 }
@@ -719,15 +769,27 @@ impl TraitEnum {
     pub fn identifier(&self) -> &Identifier { &self.identifier }
     pub fn variants(&self) -> &[Variant] { &self.variants }
 
-    pub fn new(identifier: Identifier, variants: Vec<Variant>) -> Self {
+    pub fn new(identifier: Identifier, variants: Vec<Variant>, relation_enums: HashMap<String, Identifier>)
+            -> Self {
         Self {
             identifier,
-            variants
+            variants,
+            named_relation_enum_ids: relation_enums
         }
     }
 
     pub fn variant(&self, name: &str) -> Option<&Variant> {
         self.variants.iter().find(|v| name == v.name )
+    }
+
+    /// Each key matches a method name of the enumtrait, which has been modeled with a relation definition
+    /// Each value is the Identifier for the related enum (also implementing enumtrait)
+    pub fn relation_enums(&self) -> hash_map::Iter<'_, String, Identifier> {
+        self.named_relation_enum_ids.iter()
+    }
+
+    pub fn relation_enum_identifier(&self, relation_name: &str) -> Option<&Identifier> {
+        self.named_relation_enum_ids.get(relation_name)
     }
 }
 

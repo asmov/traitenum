@@ -1,5 +1,4 @@
 use quote::{self, TokenStreamExt, ToTokens};
-use syn::spanned::Spanned;
 
 use crate::model;
 
@@ -22,6 +21,28 @@ impl quote::ToTokens for model::AttributeValue {
                 model::Value::Type(id) => id.to_token_stream(),
             }
         );
+    }
+}
+
+impl model::Identifier {
+    pub fn to_path(&self, spanned: &impl syn::spanned::Spanned) -> syn::Path {
+        let mut path = syn::Path {
+            leading_colon: None,
+            segments: syn::punctuated::Punctuated::new()
+        };
+
+        self.path.iter().for_each(|s| {
+                let ident = syn::Ident::new(s, spanned.span());
+                let segment = syn::PathSegment::from(ident);
+                path.segments.push_value(segment)
+            }
+        );
+
+        let ident = syn::Ident::new(self.name(), spanned.span());
+        let segment = syn::PathSegment::from(ident);
+        path.segments.push(segment);
+ 
+        path
     }
 }
 
@@ -48,19 +69,8 @@ impl quote::ToTokens for model::ReturnType{
 
 impl quote::ToTokens for model::Identifier {
     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
-        let mut path = syn::Path {
-            leading_colon: None,
-            segments: syn::punctuated::Punctuated::new()
-        };
-
-        self.path.iter().for_each(|s| {
-                let ident = syn::Ident::new(s, tokens.span());
-                let segment = syn::PathSegment::from(ident);
-                path.segments.push_value(segment)
-            }
-        );
-        
-        tokens.append_all(path.to_token_stream())
+       
+        tokens.append_all(self.to_path(tokens).to_token_stream())
     }
 }
 
@@ -70,6 +80,7 @@ impl model::Method {
             model::ReturnType::Type => {
                 match self.attribute_definition() {
                     model::AttributeDefinition::FieldlessEnum(enumdef) => enumdef.identifier.to_token_stream(),
+                    model::AttributeDefinition::Relation(reldef) => reldef.identifier.to_token_stream(),
                     _ => unreachable!("Invalid attribute definition for ReturnType::Type")
                 }
             },

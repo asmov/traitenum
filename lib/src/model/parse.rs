@@ -38,6 +38,20 @@ impl From<&syn::Path> for model::Identifier{
     }
 }
 
+impl From<syn::Path> for model::Identifier{
+    fn from(path: syn::Path) -> Self {
+        let mut path = path;
+        let name = path.segments.pop().unwrap()
+            .value().ident.to_string();
+        let path = path.segments.pairs()
+            .map(|pair| pair.value().ident.to_string())
+            .collect();
+
+        Self::new(path, name)
+    }
+}
+
+
 impl TryFrom<&syn::Path> for model::ReturnType {
     type Error = ();
 

@@ -135,6 +135,7 @@ fn parse_enumtrait_macro(attr: proc_macro2::TokenStream, item: proc_macro2::Toke
                 let attribute_def = if let Some(attrib) = attrib {
                     parse::parse_attribute_definition(attrib, trait_item.span(), return_type, return_type_identifier)?
                 } else {
+                    // build a default attribute definition for this method
                     model::AttributeDefinition::partial(None, return_type, return_type_identifier)
                         .map_err(|e| mksynerr!(span, "Unable to parse definition from return signature for `{}` :: {}",
                             method_name, e))?
@@ -259,76 +260,39 @@ pub fn traitenum_derive_macro(
  
 fn parse_traitenum_macro(
         item: proc_macro2::TokenStream,
-        model_bytes: &[u8]) -> Result<TraitEnumMacroOutput, syn::Error> {
-    let model = model::EnumTrait::from(model_bytes);
-
-    let item: syn::DeriveInput = syn::parse2(item)?;
-    let span = item.span();
-
-    //TODO: parse top-level attributes (item.attr) -> #[traitenum(<relation name>(<trait path>))]
-
-    let data_enum: &syn::DataEnum = match item.data {
-        syn::Data::Enum(ref data_enum) => data_enum,
-        _ => synerr!(span, "Only enums are supported for #[{}]", ENUM_ATTRIBUTE_HELPER_NAME)
-    };
-
-    let trait_ident = syn::Ident::new(model.identifier().name(), item.span());
-    let item_ident = &item.ident;
-
-    let mut traitenum_build = model::TraitEnumBuilder::new();
-    traitenum_build.identifier(model::Identifier::from(&item.ident));
-    //let mut trait_enum = model::TraitEnum::partial(model::Identifier::from(&item.ident));
-
-    // parse enum attribute values, if provided
-    let mut ordinal: usize = 0;
-    for variant in &data_enum.variants {
-        let variant_name = variant.ident.to_string();
-        // find the #[traitenum] attribute or continue
-        let attribute = variant.attrs.iter()
-            .find(|a| a.path().segments.first()
-                .is_some_and(|s| ENUM_ATTRIBUTE_HELPER_NAME == s.ident.to_string()));
-
-        let mut variant_build = if let Some(attribute) = attribute {
-            parse::parse_variant(&variant_name, attribute, &model)?
-        } else {
-            let mut build = model::VariantBuilder::new();
-            build.name(variant_name.to_owned());
-            build
-        };
-
-        // set attribute value defaults. throw errors where values are required, but not provided
-        for method in model.methods() {
-            let method_name = method.name();
-            if variant_build.has_value(method_name) {
-                continue;
-            } else if !method.attribute_definition().has_default_or_preset() {
-                synerr!(span, "Missing value for attribute `{}`: {}", method_name, variant_name);
-            } else {
-                let value = method.attribute_definition().default_or_preset(&variant_name, ordinal).unwrap();
-                variant_build.value(method_name.to_string(), model::AttributeValue::new(value));
-
-            }
-        }
-
-        traitenum_build.push_variant(variant_build.build());
-        ordinal += 1;
-    }
-
-    let trait_enum = traitenum_build.build(); 
+        enumtrait_model_bytes: &[u8]) -> Result<TraitEnumMacroOutput, syn::Error> {
+    let enumtrait = model::EnumTrait::from(enumtrait_model_bytes);
+    let input: syn::DeriveInput = syn::parse2(item)?;
+    // the actual parsing is done with this call, the rest is building a tokenstream
+    let traitenum = parse_traitenum_model(&input, &enumtrait)?;
+    let trait_ident = syn::Ident::new(enumtrait.identifier().name(), input.span());
+    let data_enum = data_enum(&input)?;
 
     // write a method for each one defined by the enum trait, which returns the value defined by each enum variant
-    let method_outputs = model.methods().iter().map(|method| {
+    let method_outputs = enumtrait.methods().iter().map(|method| {
         let method_name = method.name();
-        let func: syn::Ident = syn::Ident::new(method_name, span);
+        let func: syn::Ident = syn::Ident::new(method_name, input.span());
         let return_type = method.return_type_tokens();
+
+        match method.attribute_definition() {
+            model::AttributeDefinition::Relation(_) => {
+                let relation_path = traitenum.relation_enum_identifier(method_name).unwrap().to_path(&input);
+                return quote::quote!{
+                    fn #func(&self) -> #return_type {
+                        #relation_path
+                    }
+                }
+            },
+            _ => ()
+        }
 
         // create the match{} body of the method, mapping variants to their return value
         let variant_outputs = data_enum.variants.iter().map(|variant_data| {
             let variant_ident = &variant_data.ident;
             let variant_name = variant_ident.to_string();
-            let value = trait_enum
+            let value = traitenum
                 .variant(&variant_name).unwrap()
-                .value(method_name).unwrap()
+                .value(method_name).unwrap()            
                 .to_token_stream();
 
             quote::quote!{
@@ -348,16 +312,136 @@ fn parse_traitenum_macro(
         output
     });
 
+    // define an associated type for each of the traitenum's relations
+    // e.g., enum Foo { type OtherTraitEnum = OtherEnum; ... }
+    let type_outputs = traitenum.relation_enums().map(|(relation_name, relation_enum_id)| {
+        // all of the errors should have been handled during model parsing, so we panic here instead of Err 
+        // fetch the attribute definition with the same name as the relation's name 
+        let attribute_definition = enumtrait.methods().iter()
+            .find(|m| { m.name() == relation_name })
+            .expect(&format!("No matching relation definition for enum relation: {}", relation_name))
+            .attribute_definition();
+        // grab the associated relation definition for the attribute, which contains its Self::<Type> Identifier
+        match attribute_definition {
+            model::AttributeDefinition::Relation(_) => {},
+            _ => unreachable!("Mismatched AttributeDefinition variant for traitenum relation: {}", relation_name)
+        };
+
+        let associated_type = enumtrait.types().iter().find(|t| t.relation_name() == relation_name)
+            .expect(&format!("No matching associated type for enum relation: {}", relation_name));
+
+        let type_ident = syn::Ident::new(associated_type.name(), input.span());
+        let enum_ident = relation_enum_id.base().unwrap().to_path(&input);
+        
+        quote::quote!{
+            type #type_ident = #enum_ident;
+        }
+    });
+
+    let input_ident = &input.ident;
+
     let output = quote::quote!{
-        impl #trait_ident for #item_ident {
+        impl #trait_ident for #input_ident {
+            #(#type_outputs)*
             #(#method_outputs)*
         }
     };
 
     Ok(TraitEnumMacroOutput {
         tokens: output,
-        model: trait_enum
+        model: traitenum
     })
+}
+
+fn data_enum(input: &syn::DeriveInput) -> Result<&syn::DataEnum, syn::Error> {
+    match input.data {
+        syn::Data::Enum(ref data_enum) => Ok(data_enum),
+        _ => synerr!(input.span(), "Only enums are supported for #[{}]", ENUM_ATTRIBUTE_HELPER_NAME)
+    }
+}
+
+fn parse_traitenum_model(input: &syn::DeriveInput, enumtrait: &model::EnumTrait)
+        -> Result<model::TraitEnum, syn::Error> {
+    let mut traitenum_build = model::TraitEnumBuilder::new();
+    traitenum_build.identifier(model::Identifier::from(&input.ident));
+
+    //parse top-level attributes (item.attr) as relations -> #[traitenum(<relation name>(<trait path>))]
+    for attr in &input.attrs {
+        attr.parse_nested_meta(|meta| {
+            // this will be the method and relation name as well
+            let attr_name = meta.path.get_ident()
+                .ok_or(mksynerr!( input.span(),
+                    "Invalid traitenum attribute. It is not an ident token: `{}`",
+                    meta.path.to_token_stream().to_string()))?
+                .to_string();
+
+            // prevent duplicates
+            if traitenum_build.has_relation_enum(&attr_name) {
+                synerr!(input.span(), "Duplicate traitenum attribute for enum: {}", attr_name);
+            }
+
+            // find the matching trait method by name
+            let attribute_definition = enumtrait.methods().iter()
+                .find(|m| { m.name() == attr_name })
+                .ok_or_else(|| mksynerr!(input.span(),
+                    "No matching trait method for enum attribute: {}", attr_name))?
+                .attribute_definition();
+
+            // ensure that we're using a relation attribute definition for this method
+            match attribute_definition {
+                model::AttributeDefinition::Relation(_) => (),
+                _ => synerr!(input.span(),
+                    "Trait method definition is not a Relation as expected for enum attribute: {}", attr_name)
+            }
+
+            let content;
+            syn::parenthesized!(content in meta.input);
+            let relation_path: syn::Path = content.parse()?;
+            traitenum_build.relation_enum(attr_name, relation_path.into());
+
+            Ok(())
+        })?;
+    }
+
+
+    // parse enum attribute values, if provided
+    let data_enum = data_enum(input)?;
+    let mut ordinal: usize = 0;
+    for variant in &data_enum.variants {
+        let variant_name = variant.ident.to_string();
+        // find the #[traitenum] attribute or continue
+        let attribute = variant.attrs.iter()
+            .find(|a| a.path().segments.first()
+                .is_some_and(|s| ENUM_ATTRIBUTE_HELPER_NAME == s.ident.to_string()));
+
+        let mut variant_build = if let Some(attribute) = attribute {
+            parse::parse_variant(&variant_name, attribute, &enumtrait)?
+        } else {
+            let mut build = model::VariantBuilder::new();
+            build.name(variant_name.to_owned());
+            build
+        };
+
+        // set attribute value defaults. throw errors where values are required, but not provided
+        for method in enumtrait.methods() {
+            let method_name = method.name();
+            if variant_build.has_value(method_name) {
+                continue;
+            } else if !method.attribute_definition().needs_value() {
+                continue;
+            } else if !method.attribute_definition().has_default_or_preset() {
+                synerr!(input.span(), "Missing value for attribute `{}`: {}", method_name, variant_name);
+            } else {
+                let value = method.attribute_definition().default_or_preset(&variant_name, ordinal).unwrap();
+                variant_build.value(method_name.to_string(), model::AttributeValue::new(value));
+            }
+        }
+
+        traitenum_build.variant(variant_build.build());
+        ordinal += 1;
+    }
+
+    Ok(traitenum_build.build())
 }
 
 #[cfg(test)]
@@ -368,9 +452,12 @@ mod tests {
     /// Asserts that the expected value has been defined for a given enum variant
     macro_rules! assert_traitenum_value {
         ($model:ident, $variant_name:literal, $attribute_name:literal, $value_type:ident, $expected:expr) => {
+            assert!($model.variant($variant_name).is_some(), "Variant doesn't exist: {}", $variant_name);
+            assert!($model.variant($variant_name).unwrap().value($attribute_name).is_some(),
+                "Variant attribute doesn't exist: {} -> {}", $variant_name, $attribute_name);
             match $model.variant($variant_name).unwrap().value($attribute_name).unwrap().value() {
                 model::Value::$value_type(ref val) => assert_eq!($expected, *val),
-                _ => assert!(false, "Incorrect value type for attribute: $attribute_name")
+                _ => assert!(false, "Incorrect value type for attribute: {}", $attribute_name)
             }
         };
     }
@@ -380,7 +467,7 @@ mod tests {
         ($model:ident, $variant_name:literal, $attribute_name:literal, $expected:literal) => {
             match $model.variant($variant_name).unwrap().value($attribute_name).unwrap().value() {
                 model::Value::EnumVariant(ref val) => assert_eq!($expected, val.to_string()),
-                _ => assert!(false, "Incorrect value type for attribute: $attribute_name")
+                _ => assert!(false, "Incorrect value type for attribute: {}", $attribute_name)
             }
         };
     }
@@ -431,7 +518,7 @@ mod tests {
         assert_eq!("MyTrait", model.identifier().name());
 
         let item_src = quote::quote!{
-            //#[traitenum(parent(OtherEnum))]
+            #[traitenum(many_to_one(OtherEnum::My))]
             enum MyEnum {
                 One,
                 #[traitenum(str_preset_variant("2"))]
@@ -444,14 +531,16 @@ mod tests {
         };
 
         let model_bytes = bincode::serialize(&model).unwrap();
-        let enum_model = super::parse_traitenum_macro(item_src, &model_bytes).unwrap().model;
-        dbg!(&enum_model);
+        let super::TraitEnumMacroOutput {model: enum_model, tokens: enum_tokens} = super::parse_traitenum_macro(
+            item_src, &model_bytes).unwrap();
 
-        assert_traitenum_value!(enum_model, "One", "str_default_preset", StaticStr, "One");
+        dbg!(&enum_model);
+        dbg!(&enum_tokens.to_string());
+
+        assert_traitenum_value!(enum_model, "One", "str_default", StaticStr, ":)");
         assert_traitenum_value!(enum_model, "Two", "num_default", UnsignedSize, 44);
-        assert_traitenum_value!(enum_model, "Two", "str_default_preset", StaticStr, "2");
+        assert_traitenum_value!(enum_model, "Two", "str_preset_variant", StaticStr, "2");
         assert_traitenum_value!(enum_model, "Three", "num_preset_serial_all", UnsignedInteger64, 7);
-        assert_traitenum_value!(enum_model, "Three", "enum_default", Bool, false);
         assert_traitenum_value_enum!(enum_model, "Three", "enum_default", "RPS::Rock");
         assert_traitenum_value_enum!(enum_model, "Four", "enum_default", "RPS::Scissors");
     }

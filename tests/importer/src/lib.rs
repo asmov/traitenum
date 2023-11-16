@@ -1,5 +1,6 @@
 use traitenum_test_exporter_macro as traitmacro;
 use traitenum_test_exporter_traits::SimpleTrait;
+use traitenum_test_exporter_traits::ParentTrait;
 use traitenum_test_exporter_traits::ChildTrait;
 
 #[derive(traitmacro::SimpleTraitEnum)]
@@ -12,9 +13,17 @@ pub enum ImporterEnum {
     Charlie
 }
 
+#[derive(traitmacro::ParentTraitEnum)]
+pub enum ImporterParentEnum {
+    Alpha,
+    Bravo,
+    Charlie 
+}
+
+
 #[derive(traitmacro::ChildTraitEnum)]
-#[traitenum(parent(ImporterParentEnum))]
-pub enum ImporterChildEnum {
+#[traitenum(parent(ImporterParentEnum::Alpha))]
+pub enum ImporterChildAlphaEnum {
     One,
     Two,
     Three
