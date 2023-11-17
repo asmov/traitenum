@@ -521,7 +521,8 @@ mod tests {
             #[traitenum(many_to_one(OtherEnum::My))]
             enum MyEnum {
                 One,
-                #[traitenum(str_preset_variant("2"))]
+                // test short-hand enum values
+                #[traitenum(str_preset_variant("2"), enum_default(Paper))]
                 Two,
                 #[traitenum(bool_default(false))]
                 Three,
@@ -537,11 +538,20 @@ mod tests {
         dbg!(&enum_model);
         dbg!(&enum_tokens.to_string());
 
+        // test defaults
         assert_traitenum_value!(enum_model, "One", "str_default", StaticStr, ":)");
-        assert_traitenum_value!(enum_model, "Two", "num_default", UnsignedSize, 44);
+        assert_traitenum_value!(enum_model, "One", "bool_default", Bool, true);
+        assert_traitenum_value!(enum_model, "One", "num_default", UnsignedSize, 44);
+        assert_traitenum_value_enum!(enum_model, "One", "enum_default", "RPS::Rock");
+        // test string preset(variant)
         assert_traitenum_value!(enum_model, "Two", "str_preset_variant", StaticStr, "2");
+        // test u64 preset(serial) w/start(3), increment(2)
         assert_traitenum_value!(enum_model, "Three", "num_preset_serial_all", UnsignedInteger64, 7);
-        assert_traitenum_value_enum!(enum_model, "Three", "enum_default", "RPS::Rock");
+        // test short-hand enum value
+        assert_traitenum_value_enum!(enum_model, "Two", "enum_default", "RPS::Paper");
+        // test non-default bool
+        assert_traitenum_value!(enum_model, "Three", "bool_default", Bool, false);
+        // test non-default enum
         assert_traitenum_value_enum!(enum_model, "Four", "enum_default", "RPS::Scissors");
     }
 

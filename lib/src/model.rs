@@ -51,6 +51,13 @@ impl Identifier {
             None
         }
     }
+
+    pub fn append(&self, rh: Identifier) -> Identifier {
+        let mut path = self.path.clone();
+        path.push(self.name.to_owned());
+        path.extend_from_slice(&rh.path);
+        Self::new(path, rh.name().to_owned())
+    }
 }
 
 impl Display for Identifier {
@@ -391,7 +398,7 @@ impl AttributeDefinition {
         }
     }
 
-    // Ensures that this definition is valid based return type, presets, etc.
+    /// Ensures that this definition is valid based return type, presets, etc.
     pub fn validate(&self) -> Result<(), &str> {
         if self.has_default() && self.has_preset() {
             return Err("Both a default and a preset have been set");

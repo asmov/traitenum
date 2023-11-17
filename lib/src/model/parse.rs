@@ -327,8 +327,16 @@ pub(crate) fn parse_variant(variant_name: &str, attr: &syn::Attribute, model: &m
                 content.parse::<syn::LitFloat>()?.base10_parse()?),
             model::AttributeDefinition::Byte(_) => model::Value::Byte(
                 content.parse::<syn::LitByte>()?.value()),
-            model::AttributeDefinition::FieldlessEnum(_) => model::Value::EnumVariant(
-                content.parse::<model::Identifier>()?),
+            model::AttributeDefinition::FieldlessEnum(enumdef) => {
+                let mut id = content.parse::<model::Identifier>()?;
+                // users are allowed to drop the enum type in short-hand (Foo instead of MyEnum::Foo)
+                // fill in the path if they do this
+                if id.path().is_empty() {
+                    id = enumdef.identifier.append(id)
+                }
+
+                model::Value::EnumVariant(id)
+            },
             model::AttributeDefinition::Relation(_) => model::Value::Relation(
                 content.parse::<model::Identifier>()?),
             model::AttributeDefinition::Type(_) => model::Value::Type(
