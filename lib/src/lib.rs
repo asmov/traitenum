@@ -23,23 +23,23 @@ pub(crate) const ENUM_ATTRIBUTE_HELPER_NAME: &'static str = "traitenum";
 ///     let span = tokens.span();
 ///     let path = match syn::parse2::<syn::Path>(tokens) {
 ///         Ok(p) => p,
-///         Err(_) => synerr!(span, "Unable to parse path")
+///         Err(_) => synerr!("Unable to parse path")
 ///     };
 /// 
 ///     match path.get_ident() {
 ///         Some(ident) => Ok(ident.to_owned()),
-///         None => Err(mksynerr!(span, "Path is not an ident: {}", path.to_token_stream().to_string()))
+///         None => Err(mksynerr!("Path is not an ident: {}", path.to_token_stream().to_string()))
 ///     }
 /// }
 /// # }
 /// ```
 #[macro_export]
 macro_rules! synerr {
-    ($span:expr, $message:expr) => {
-        return Err(syn::Error::new($span, format!("{}{}", ERROR_PREFIX, $message)))
+    ($message:expr) => {
+        return Err(syn::Error::new(::proc_macro2::Span::call_site(), format!("{}{}", ERROR_PREFIX, $message)))
     };
-    ($span:expr, $message:literal, $($v:expr),+) => {
-        return Err(syn::Error::new($span, format!("{}{}", ERROR_PREFIX, format!($message
+    ($message:literal, $($v:expr),+) => {
+        return Err(syn::Error::new(::proc_macro2::Span::call_site(), format!("{}{}", ERROR_PREFIX, format!($message
         $(
             , $v
         )+
@@ -63,25 +63,25 @@ macro_rules! synerr {
 /// # fn main() { 
 /// fn strip_ident(tokens: proc_macro2::TokenStream) -> Result<syn::Ident, syn::Error> {
 ///     let span = tokens.span();
-///     let path = match syn::parse2::<syn::Path>(tokens) {
+///     let path = match ::syn::parse2::<syn::Path>(tokens) {
 ///         Ok(p) => p,
-///         Err(_) => synerr!(span, "Unable to parse path")
+///         Err(_) => synerr!("Unable to parse path")
 ///     };
 /// 
 ///     match path.get_ident() {
 ///         Some(ident) => Ok(ident.to_owned()),
-///         None => Err(mksynerr!(span, "Path is not an ident: {}", path.to_token_stream().to_string()))
+///         None => Err(mksynerr!("Path is not an ident: {}", path.to_token_stream().to_string()))
 ///     }
 /// }
 /// # }
 /// ```
 #[macro_export]
 macro_rules! mksynerr {
-    ($span:expr, $message:expr) => {
-        syn::Error::new($span, format!("{}{}", ERROR_PREFIX, $message))
+    ($message:expr) => {
+        syn::Error::new(::proc_macro2::Span::call_site(), format!("{}{}", ERROR_PREFIX, $message))
     };
-    ($span:expr, $message:literal, $($v:expr),+) => {
-        syn::Error::new($span, format!("{}{}", ERROR_PREFIX, format!($message
+    ($message:literal, $($v:expr),+) => {
+        syn::Error::new(::proc_macro2::Span::call_site(), format!("{}{}", ERROR_PREFIX, format!($message
         $(
             , $v
         )+

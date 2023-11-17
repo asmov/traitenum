@@ -1,20 +1,18 @@
 use std::str::FromStr;
-
 use quote::ToTokens;
-use syn::spanned::Spanned;
 use syn::{self, parse};
 
-use crate::model;
-use crate::{synerr, mksynerr, TRAIT_ATTRIBUTE_HELPER_NAME};
+use crate::{model, TRAIT_ATTRIBUTE_HELPER_NAME};
+use crate::{synerr, mksynerr};
 
 const ERROR_PREFIX: &'static str = "traitenum: ";
 
 impl parse::Parse for model::Identifier {
     fn parse(input: parse::ParseStream) -> syn::Result<Self> {
-        let path: syn::Path = input.parse().map_err(|_| syn::Error::new(input.span(),
+        let path: syn::Path = input.parse().map_err(|_| syn::Error::new(proc_macro2::Span::call_site(),
             "Unable to parse trait #enumtrait(<absolute trait path>)"))?;
         Self::try_from(&path)
-            .or_else(|_| synerr!(input.span(), "Unable to parse Identifier from Path: {}",
+            .or_else(|_| synerr!("Unable to parse Identifier from Path: {}",
                 path.to_token_stream().to_string()))
     }
 }
@@ -65,28 +63,26 @@ impl TryFrom<&syn::Path> for model::ReturnType {
 
 pub(crate) fn parse_attribute_definition(
         attr: &syn::Attribute,
-        span: proc_macro2::Span,
         return_type: model::ReturnType,
         return_type_id: Option<model::Identifier>
     ) -> Result<model::AttributeDefinition, syn::Error> {
     if attr.path().segments.len() != 2 {
-        synerr!(span, "Unable to parse helper attribute: `{}`. Format: {}::DefinitionName",
+        synerr!("Unable to parse helper attribute: `{}`. Format: {}::DefinitionName",
             TRAIT_ATTRIBUTE_HELPER_NAME,
             attr.path().to_token_stream().to_string())
     }
 
     let definition_name = attr.path().segments.last()
-        .ok_or(mksynerr!(span,
-            "Empty helper attribute definition name. Format: {}::DefinitionName",
+        .ok_or(mksynerr!("Empty helper attribute definition name. Format: {}::DefinitionName",
             TRAIT_ATTRIBUTE_HELPER_NAME))?.ident.to_string();
 
     let mut def = model::AttributeDefinition::partial(Some(&definition_name), return_type, return_type_id)
-        .map_err(|e| mksynerr!(span, "Unable to parse return type for definition `{}` :: {}",
+        .map_err(|e| mksynerr!("Unable to parse return type for definition `{}` :: {}",
             attr.path().to_token_stream().to_string(), e))?;
 
     attr.parse_nested_meta(|meta| {
         let name = meta.path.get_ident()
-            .ok_or(mksynerr!(span, "Unknown definition property: `{}`",
+            .ok_or(mksynerr!("Unknown definition property: `{}`",
                 meta.path.to_token_stream().to_string()))?
             .to_string();
 
@@ -95,16 +91,16 @@ pub(crate) fn parse_attribute_definition(
 
         match definition_name.as_str() {
             model::BoolAttributeDefinition::DEFINITION_NAME =>  
-                parse_bool_attribute_definition(&mut def, &name, content, span, return_type)?,
+                parse_bool_attribute_definition(&mut def, &name, content, return_type)?,
             model::StaticStrAttributeDefinition::DEFINITION_NAME => 
-                parse_string_attribute_definition(&mut def, &name, content, span, return_type)?,
+                parse_string_attribute_definition(&mut def, &name, content, return_type)?,
             model::NumberAttributeDefinition::<usize>::DEFINITION_NAME => 
-                parse_number_attribute_definition(&mut def, &name, content, span, return_type)?,
+                parse_number_attribute_definition(&mut def, &name, content, return_type)?,
             model::FieldlessEnumAttributeDefinition::DEFINITION_NAME =>
-                parse_enum_attribute_definition(&mut def, &name, content, span, return_type)?,
+                parse_enum_attribute_definition(&mut def, &name, content, return_type)?,
             model::RelationAttributeDefinition::DEFINITION_NAME =>
-                parse_relation_attribute_definition(&mut def, &name, content, span, return_type)?,
-             _ => synerr!(span, "Unknown attribute definition: {}", definition_name)
+                parse_relation_attribute_definition(&mut def, &name, content, return_type)?,
+             _ => synerr!("Unknown attribute definition: {}", definition_name)
 
         };
 
@@ -121,18 +117,17 @@ fn parse_bool_attribute_definition(
         def: &mut model::AttributeDefinition,
         name: &str,
         content: syn::parse::ParseBuffer,
-        span: proc_macro2::Span,
         _return_type: model::ReturnType) -> Result<(), syn::Error> {
     let booldef = match def {
         model::AttributeDefinition::Bool(def) => def,
-        _ => synerr!(span, "Incorrect attribute definition for return type for property: {}", name)
+        _ => synerr!("Incorrect attribute definition for return type for property: {}", name)
     };
 
     match name {
        DEFINITION_DEFAULT => {
             booldef.default = Some(content.parse::<syn::LitBool>()?.value())
        },
-       _ => synerr!(span, "Unknown attribute definition property: {}", name)
+       _ => synerr!("Unknown attribute definition property: {}", name)
     }
 
     Ok(())
@@ -142,11 +137,10 @@ fn parse_enum_attribute_definition(
         def: &mut model::AttributeDefinition,
         name: &str,
         content: syn::parse::ParseBuffer,
-        span: proc_macro2::Span,
         _return_type: model::ReturnType) -> Result<(), syn::Error> {
     let enumdef = match def {
         model::AttributeDefinition::FieldlessEnum(def) => def,
-        _ => synerr!(span, "Mismatched definition for Enum: {}", name)
+        _ => synerr!("Mismatched definition for Enum: {}", name)
     };
 
     match name {
@@ -154,7 +148,7 @@ fn parse_enum_attribute_definition(
             let id: model::Identifier = content.parse()?;
             enumdef.default = Some(id)
        },
-       _ => synerr!(span, "Unknown definition property for Enum: {}", name)
+       _ => synerr!("Unknown definition property for Enum: {}", name)
     }
 
     Ok(())
@@ -164,11 +158,10 @@ fn parse_string_attribute_definition(
         def: &mut model::AttributeDefinition,
         name: &str,
         content: syn::parse::ParseBuffer,
-        span: proc_macro2::Span,
         _return_type: model::ReturnType) -> Result<(), syn::Error> {
     let strdef = match def {
         model::AttributeDefinition::StaticStr(def) => def,
-        _ => synerr!(span, "Mismatched definition for Str: {}", name)
+        _ => synerr!("Mismatched definition for Str: {}", name)
     };
 
     match name {
@@ -178,10 +171,10 @@ fn parse_string_attribute_definition(
        DEFINITION_PRESET => {
             let variant_name = content.parse::<syn::Ident>()?.to_string();
             let preset = model::StringPreset::from_str(&variant_name)
-                .or(Err(mksynerr!(span, "Unknown String preset: {}", variant_name)))?;
+                .or(Err(mksynerr!("Unknown String preset: {}", variant_name)))?;
             strdef.preset = Some(preset);
        },
-       _ => synerr!(span, "Unknown definition property for Str: {}", name)
+       _ => synerr!("Unknown definition property for Str: {}", name)
     }
 
     Ok(())
@@ -193,7 +186,6 @@ fn parse_relation_attribute_definition(
         def: &mut model::AttributeDefinition,
         name: &str,
         content: syn::parse::ParseBuffer,
-        span: proc_macro2::Span,
         _return_type: model::ReturnType) -> Result<(), syn::Error> {
     let reldef = match def {
         model::AttributeDefinition::Relation(def) => def,
@@ -204,12 +196,10 @@ fn parse_relation_attribute_definition(
        DEFINITION_RELATIONSHIP => {
             let variant_name = content.parse::<syn::Ident>()?.to_string();
             let relationship = model::Relationship::from_str(&variant_name)
-                .or(Err(mksynerr!(span, "Unknown relationship: {}", variant_name)))?;
+                .or(Err(mksynerr!("Unknown relationship: {}", variant_name)))?;
             reldef.relationship = Some(relationship);
        },
-       _ => synerr!(
-                span, "Unknown property for definition {}: {}",
-                model::RelationAttributeDefinition::DEFINITION_NAME, name)
+       _ => synerr!("Unknown property for definition {}: {}", model::RelationAttributeDefinition::DEFINITION_NAME, name)
     }
 
     Ok(())
@@ -220,18 +210,17 @@ fn parse_number_attribute_definition(
         def: &mut model::AttributeDefinition,
         name: &str,
         content: syn::parse::ParseBuffer,
-        span: proc_macro2::Span,
         return_type: model::ReturnType) -> Result<(), syn::Error>
 {
     match def {
-        model::AttributeDefinition::UnsignedSize(def) => parse_number_definition(def, name, content, span, return_type, false),
-        model::AttributeDefinition::UnsignedInteger64(def) => parse_number_definition(def, name, content, span, return_type, false),
-        model::AttributeDefinition::Integer64(def) => parse_number_definition(def, name, content, span, return_type, false),
-        model::AttributeDefinition::Float64(def) => parse_number_definition(def, name, content, span, return_type, true),
-        model::AttributeDefinition::UnsignedInteger32(def) => parse_number_definition(def, name, content, span, return_type, false),
-        model::AttributeDefinition::Integer32(def) => parse_number_definition(def, name, content, span, return_type, true),
-        model::AttributeDefinition::Float32(def) => parse_number_definition(def, name, content, span, return_type, false),
-        _ => synerr!(span, "Mismatched definition for Num: {}", name)
+        model::AttributeDefinition::UnsignedSize(def) => parse_number_definition(def, name, content, return_type, false),
+        model::AttributeDefinition::UnsignedInteger64(def) => parse_number_definition(def, name, content, return_type, false),
+        model::AttributeDefinition::Integer64(def) => parse_number_definition(def, name, content, return_type, false),
+        model::AttributeDefinition::Float64(def) => parse_number_definition(def, name, content, return_type, true),
+        model::AttributeDefinition::UnsignedInteger32(def) => parse_number_definition(def, name, content, return_type, false),
+        model::AttributeDefinition::Integer32(def) => parse_number_definition(def, name, content, return_type, true),
+        model::AttributeDefinition::Float32(def) => parse_number_definition(def, name, content, return_type, false),
+        _ => synerr!("Mismatched definition for Num: {}", name)
     }
 }
 
@@ -242,7 +231,6 @@ fn parse_number_definition<N>(
         def: &mut model::NumberAttributeDefinition<N>,
         name: &str,
         content: syn::parse::ParseBuffer,
-        span: proc_macro2::Span,
         _return_type: model::ReturnType,
         is_float: bool) -> Result<(), syn::Error>
 where
@@ -267,7 +255,7 @@ where
        DEFINITION_PRESET => {
             let variant_name = content.parse::<syn::Ident>()?.to_string();
             let preset = model::NumberPreset::from_str(&variant_name)
-                .or(Err(mksynerr!(span, "Unknown definition preset for Num: {}", variant_name)))?;
+                .or(Err(mksynerr!("Unknown definition preset for Num: {}", variant_name)))?;
             def.preset = Some(preset);
        },
        DEFINITION_START => {
@@ -278,7 +266,7 @@ where
             let n: N = parsenum!();
             def.increment = Some(n)
        },
-       _ => synerr!(span, "Unknown definition property for Num: {}", name)
+       _ => synerr!("Unknown definition property for Num: {}", name)
     }
 
     Ok(())
@@ -290,16 +278,15 @@ pub(crate) fn parse_variant(variant_name: &str, attr: &syn::Attribute, model: &m
     variant_build.name(variant_name.to_owned());
     attr.parse_nested_meta(|meta| {
         let attr_name = meta.path.get_ident()
-            .ok_or(mksynerr!(attr.span(), "Invalid enum attribute: `{}`",
-                meta.path.to_token_stream().to_string()))?
+            .ok_or(mksynerr!("Invalid enum attribute: `{}`", meta.path.to_token_stream().to_string()))?
             .to_string();
 
         if variant_build.has_value(&attr_name) {
-            synerr!(attr.span(), "Duplicate enum attribute value for: {}", attr_name);
+            synerr!("Duplicate enum attribute value for: {}", attr_name);
         }
 
         let method = model.methods().iter().find(|m| m.name() == attr_name)
-            .ok_or(mksynerr!(attr.span(), "Unknown enum attribute: {}", attr_name))?;
+            .ok_or(mksynerr!("Unknown enum attribute: {}", attr_name))?;
 
         let attribute_def = &method.attribute_definition();
 

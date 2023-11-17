@@ -24,7 +24,6 @@ pub trait ChildTrait {
     fn parent(&self) -> Self::ParentTraitEnum;
 }
 
-
 #[cfg(test)]
 mod tests {
     use traitenum_lib;
@@ -32,7 +31,7 @@ mod tests {
 
     #[test]
     fn test_load_model() {
-        let bytes = super::TRAITENUM_SIMPLETRAIT;
+        let bytes = super::TRAITENUM_MODEL_BYTES_SIMPLETRAIT;
         let _model: traitenum_lib::model::EnumTrait = bincode::deserialize(bytes).unwrap();
     }
 }
