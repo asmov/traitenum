@@ -4,6 +4,7 @@ pub mod macros;
 
 pub(crate) const TRAIT_ATTRIBUTE_HELPER_NAME: &'static str = "enumtrait";
 pub(crate) const ENUM_ATTRIBUTE_HELPER_NAME: &'static str = "traitenum";
+pub(crate) const ERROR_PREFIX: &'static str = "traitenum: ";
 
 /// Forces a return from the current block with an Err(syn::Error). The error message is built using format!() and
 /// supports variable arguments.

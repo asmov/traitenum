@@ -580,9 +580,9 @@ impl FromStr for Relationship {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "one_to_one" | "one-to-one" | "OnetoOne" | "ONE_TO_ONE" => Ok(Self::OneToOne),
-            "one_to_many" | "one-to-many" | "OneToMany" | "ONE_TO_MANY" => Ok(Self::OneToMany),
-            "many_to_one" | "many-to-one" | "ManyToOne" | "MANY_TO_ONE" => Ok(Self::ManyToOne),
+            "OnetoOne" => Ok(Self::OneToOne),
+            "OneToMany" => Ok(Self::OneToMany),
+            "ManyToOne" => Ok(Self::ManyToOne),
             _ => Err(())
         }
     }
@@ -591,9 +591,7 @@ impl FromStr for Relationship {
 #[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct RelationAttributeDefinition {
     identifier: Identifier,
-    relationship: Option<Relationship>,
-    //one: Option<Identifier>,
-    //many: Option<Identifier>
+    pub(crate) relationship: Option<Relationship>,
 }
 
 impl RelationAttributeDefinition {
@@ -856,6 +854,14 @@ impl VariantBuilder {
         }
     }
 
+    //TODO
+    /*pub(crate) fn get_value(&self, attribute_name: &str) -> Option<&AttributeValue> {
+        if let Some(named_values) = &self.named_values {
+            named_values.get(attribute_name)
+        } else {
+            None
+        }
+    }*/
 
     pub(crate) fn value(&mut self, attribute_name: String, value: AttributeValue) -> &mut Self {
         if let Some(named_values) = &mut self.named_values {
