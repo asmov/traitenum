@@ -3,7 +3,6 @@ use std::{fmt::Display, str::FromStr, collections::HashMap, collections::hash_ma
 use serde;
 
 pub mod parse;
-pub mod token;
 
 #[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct EnumTrait {
