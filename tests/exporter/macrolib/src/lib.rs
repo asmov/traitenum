@@ -6,7 +6,7 @@ use traitenum_lib::model as model;
 pub fn parse_derive_traitenum(
         item: proc_macro2::TokenStream,
         model_bytes: &'static [u8]) -> Result<proc_macro2::TokenStream, syn::Error> {
-    let model = model::EnumTrait::from(model_bytes);
+    let model = model::EnumTrait::deserialize(model_bytes).unwrap();
 
     let item: syn::DeriveInput = syn::parse2(item)?;
 

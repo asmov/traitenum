@@ -690,9 +690,13 @@ pub enum Value {
     Type(Identifier),
 }
 
-impl From<&[u8]> for EnumTrait {
-    fn from(bytes: &[u8]) -> Self {
-        bincode::deserialize(bytes).unwrap()
+impl EnumTrait {
+    pub fn serialize(&self) -> bincode::Result<Vec<u8>>{
+        bincode::serialize(self)
+    }
+
+    pub fn deserialize(bytes: &[u8]) -> bincode::Result<Self> {
+        bincode::deserialize(bytes)
     }
 }
 

@@ -22,9 +22,10 @@ pub fn traitenum_derive_macro(
 }
  
 pub(crate) fn parse_traitenum_macro(
-        item: proc_macro2::TokenStream,
-        enumtrait_model_bytes: &[u8]) -> Result<TraitEnumMacroOutput, syn::Error> {
-    let enumtrait = model::EnumTrait::from(enumtrait_model_bytes);
+    item: proc_macro2::TokenStream,
+    enumtrait_model_bytes: &[u8]) -> Result<TraitEnumMacroOutput, syn::Error>
+{
+    let enumtrait = model::EnumTrait::deserialize(enumtrait_model_bytes).unwrap();
     let input: syn::DeriveInput = syn::parse2(item)?;
     // the actual parsing is done with this call, the rest is building a tokenstream
     let traitenum = parse_traitenum_model(&input, &enumtrait)?;
