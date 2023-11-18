@@ -34,12 +34,14 @@ pub fn enumtrait_macro(attr: proc_macro2::TokenStream, item: proc_macro2::TokenS
     Ok(output)
 }
 
-pub(crate) fn parse_enumtrait_macro(attr: proc_macro2::TokenStream, item: proc_macro2::TokenStream)
-        -> Result<EnumTraitMacroOutput, syn::Error> {
+pub(crate) fn parse_enumtrait_macro(
+        attr: proc_macro2::TokenStream,
+        item: proc_macro2::TokenStream) -> syn::Result<EnumTraitMacroOutput>
+{
     let identifier: model::Identifier = syn::parse2(attr)?;
-    
-    let mut item: syn::ItemTrait = syn::parse2(item)?;
-    if identifier.name() != item.ident.to_string() {
+    let mut trait_input: syn::ItemTrait = syn::parse2(item)?;
+
+    if identifier.name() != trait_input.ident.to_string() {
         synerr!("Trait name does not match #enumtrait(<absolute trait path>): {}", identifier.name());
     }
 
@@ -47,135 +49,11 @@ pub(crate) fn parse_enumtrait_macro(attr: proc_macro2::TokenStream, item: proc_m
     let mut partial_types: Vec<model::AssociatedTypePartial> = Vec::new();
     let mut types: Vec<model::AssociatedType> = Vec::new();
 
-    for trait_item in &item.items {
+    for trait_item in &trait_input.items {
         match trait_item {
-            syn::TraitItem::Fn(func) => {
-                // ignore functions with default implementations
-                if func.default.is_some() {
-                    continue;
-                }
-
-                let method_name = func.sig.ident.to_string();
-                let mut return_type: Option<model::ReturnType> = None;
-                let mut return_type_identifier: Option<model::Identifier> = None;
-
-                match &func.sig.output {
-                    syn::ReturnType::Default => synerr!("Default return types () are not supported"),
-                    syn::ReturnType::Type(_, ref returntype) => match **returntype {
-                        syn::Type::Path(ref path_type) => {
-                            match model::ReturnType::try_from(&path_type.path) {
-                                Ok(v) => return_type = Some(v),
-                                Err(_) => {
-                                    return_type = Some(model::ReturnType::Type);
-                                    return_type_identifier = match model::Identifier::try_from(&path_type.path) {
-                                        Ok(id) => Some(id),
-                                        Err(_) => synerr!("Unsupported return type: {}",
-                                            &path_type.path.to_token_stream().to_string())
-                                    }
-                                }
-                                                                };
-                        },
-                        syn::Type::Reference(ref ref_type) => {
-                            // only elided and static lifetimes are supported
-                            let _has_static_lifetime = match &ref_type.lifetime {
-                                Some(lifetime) => {
-                                    if "static" == lifetime.ident.to_string() {
-                                        true
-                                    } else {
-                                        synerr!("Only elided and static lifetimes are supported for return types")
-                                    }
-                                },
-                                None => false
-                            };
-
-                            // mutability isn not supported
-                            if ref_type.mutability.is_some() {
-                                synerr!("Mutable return types are not supported")
-                            }
-
-                            match *ref_type.elem {
-                                syn::Type::Path(ref path_type) => {
-                                    if let Some(ident) = path_type.path.get_ident() {
-                                        if "str" == ident.to_string() {
-                                            return_type = Some(model::ReturnType::StaticStr);
-                                        }
-                                    }
-
-                                    if return_type.is_none() {
-                                        todo!("lookup the return reference type");
-                                    }
-                                },
-                                _ => synerr!("Unsupported return reference type: {}",
-                                        ref_type.to_token_stream().to_string())
-                            }
-                        },
-                        _ => todo!("Unimplemented trait return type"),
-                    },
-                }
-
-                // throw an error if the the wrong helper (enum vs trait) was used
-                let attrib = func.attrs.iter().find(|attrib| {
-                    attrib.path().segments.first().is_some_and(|s| ENUM_ATTRIBUTE_HELPER_NAME == s.ident.to_string())
-                });
-
-                if attrib.is_some() {
-                    synerr!("Wrong attribute helper was used for trait: `#[{}]`. Please use for `#[{}]` traits.",
-                        ENUM_ATTRIBUTE_HELPER_NAME, TRAIT_ATTRIBUTE_HELPER_NAME);
-                }
-
-                let return_type = return_type.ok_or(mksynerr!("Uable to parse return type!!"))?;
-
-                // expected: traitenum::<AttributeDefinition>. we match against the 'traitenum' segment to get started.
-                let attrib = func.attrs.iter().find(|attrib| {
-                    attrib.path().segments.first().is_some_and(|s| TRAIT_ATTRIBUTE_HELPER_NAME == s.ident.to_string())
-                });
-
-                let attribute_def = if let Some(attrib) = attrib {
-                    parse::parse_attribute_definition(attrib, return_type, return_type_identifier)?
-                } else {
-                    // build a default attribute definition for this method
-                    model::AttributeDefinition::partial(None, return_type, return_type_identifier)
-                        .map_err(|e| mksynerr!("Unable to parse definition from return signature for `{}` :: {}",
-                            method_name, e))?
-                };
-
-                // ensure that the attribute definition adheres to its own rules
-                if let Err(errmsg) = attribute_def.validate() {
-                    synerr!(errmsg);
-                }
-
-                let method = model::Method::new(method_name, return_type, attribute_def);
-                methods.push(method);
-                
-            },
-            syn::TraitItem::Type(type_item) => {
-                let type_identifier = model::Identifier::from(&type_item.ident);
-                if type_item.bounds.len() != 1 {
-                    synerr!("Unsupported trait bounds for associated type: {}", type_identifier.name())
-                }
-
-                let trait_identifier = match type_item.bounds.first().unwrap() {
-                    syn::TypeParamBound::Trait(trait_bound) => model::Identifier::from(&trait_bound.path),
-                    syn::TypeParamBound::Lifetime(_) => 
-                        synerr!("Unsupported trait bounds for associated type: {}", type_identifier.name()),
-                    syn::TypeParamBound::Verbatim(_) => 
-                        synerr!("Unsupported trait bounds for associated type: {}", type_identifier.name()),
-                    _ =>
-                        synerr!("Unsupported trait bounds for associated type: {}", type_identifier.name())
-                };
-
-                let partial_associated_type = model::AssociatedTypePartial{
-                    name: type_identifier.name().to_owned(),
-                    trait_identifier,
-                    matched: false
-                };
-
-                partial_types.push(partial_associated_type);
-            },
-            syn::TraitItem::Macro(_) => {},
-            syn::TraitItem::Verbatim(_) => {},
-            syn::TraitItem::Const(_) => {},
-            _ => () 
+            syn::TraitItem::Fn(func) => parse_trait_fn(&mut methods, func)?,
+            syn::TraitItem::Type(type_item) => parse_trait_type(&mut partial_types, type_item)?,
+            _ => ()
         }
     }
 
@@ -210,8 +88,148 @@ pub(crate) fn parse_enumtrait_macro(attr: proc_macro2::TokenStream, item: proc_m
         synerr!("No matching relationship definition for associated type: {}", unmatched_type.name);
     }
 
+    clean_helper_attributes(&mut trait_input)?;
+
+    Ok(EnumTraitMacroOutput {
+        tokens: trait_input.to_token_stream(),
+        model: model::EnumTrait::new(identifier, methods, types)
+    })
+}
+
+fn parse_trait_fn(methods: &mut Vec<model::Method>, func: &syn::TraitItemFn) -> syn::Result<()> {
+    // ignore functions with default implementations
+    if func.default.is_some() {
+        return Ok(());
+    }
+
+    let method_name = func.sig.ident.to_string();
+    let mut return_type: Option<model::ReturnType> = None;
+    let mut return_type_identifier: Option<model::Identifier> = None;
+
+    match &func.sig.output {
+        syn::ReturnType::Default => synerr!("Default return types () are not supported"),
+        syn::ReturnType::Type(_, ref returntype) => match **returntype {
+            syn::Type::Path(ref path_type) => {
+                match model::ReturnType::try_from(&path_type.path) {
+                    Ok(v) => return_type = Some(v),
+                    Err(_) => {
+                        return_type = Some(model::ReturnType::Type);
+                        return_type_identifier = match model::Identifier::try_from(&path_type.path) {
+                            Ok(id) => Some(id),
+                            Err(_) => synerr!("Unsupported return type: {}",
+                                &path_type.path.to_token_stream().to_string())
+                        }
+                    }
+                                                    };
+            },
+            syn::Type::Reference(ref ref_type) => {
+                // only elided and static lifetimes are supported
+                let _has_static_lifetime = match &ref_type.lifetime {
+                    Some(lifetime) => {
+                        if "static" == lifetime.ident.to_string() {
+                            true
+                        } else {
+                            synerr!("Only elided and static lifetimes are supported for return types")
+                        }
+                    },
+                    None => false
+                };
+
+                // mutability isn not supported
+                if ref_type.mutability.is_some() {
+                    synerr!("Mutable return types are not supported")
+                }
+
+                match *ref_type.elem {
+                    syn::Type::Path(ref path_type) => {
+                        if let Some(ident) = path_type.path.get_ident() {
+                            if "str" == ident.to_string() {
+                                return_type = Some(model::ReturnType::StaticStr);
+                            }
+                        }
+
+                        if return_type.is_none() {
+                            todo!("lookup the return reference type");
+                        }
+                    },
+                    _ => synerr!("Unsupported return reference type: {}",
+                            ref_type.to_token_stream().to_string())
+                }
+            },
+            _ => todo!("Unimplemented trait return type"),
+        }
+    }
+
+    // throw an error if the the wrong helper (enum vs trait) was used
+    let attrib = func.attrs.iter().find(|attrib| {
+        attrib.path().segments.first().is_some_and(|s| ENUM_ATTRIBUTE_HELPER_NAME == s.ident.to_string())
+    });
+
+    if attrib.is_some() {
+        synerr!("Wrong attribute helper was used for trait: `#[{}]`. Please use for `#[{}]` traits.",
+            ENUM_ATTRIBUTE_HELPER_NAME, TRAIT_ATTRIBUTE_HELPER_NAME);
+    }
+
+    let return_type = return_type.ok_or(mksynerr!("Uable to parse return type!!"))?;
+
+    // expected: traitenum::<AttributeDefinition>. we match against the 'traitenum' segment to get started.
+    let attrib = func.attrs.iter().find(|attrib| {
+        attrib.path().segments.first().is_some_and(|s| TRAIT_ATTRIBUTE_HELPER_NAME == s.ident.to_string())
+    });
+
+    let attribute_def = if let Some(attrib) = attrib {
+        parse::parse_attribute_definition(attrib, return_type, return_type_identifier)?
+    } else {
+        // build a default attribute definition for this method
+        model::AttributeDefinition::partial(None, return_type, return_type_identifier)
+            .map_err(|e| mksynerr!("Unable to parse definition from return signature for `{}` :: {}",
+                method_name, e))?
+    };
+
+    // ensure that the attribute definition adheres to its own rules
+    if let Err(errmsg) = attribute_def.validate() {
+        synerr!(errmsg);
+    }
+
+    let method = model::Method::new(method_name, return_type, attribute_def);
+    methods.push(method);
+
+    Ok(())
+}
+
+fn parse_trait_type(
+    partial_types: &mut Vec<model::AssociatedTypePartial>,
+    type_item: &syn::TraitItemType) -> syn::Result<()>
+{
+    let type_identifier = model::Identifier::from(&type_item.ident);
+    if type_item.bounds.len() != 1 {
+        synerr!("Unsupported trait bounds for associated type: {}", type_identifier.name())
+    }
+
+    let trait_identifier = match type_item.bounds.first().unwrap() {
+        syn::TypeParamBound::Trait(trait_bound) => model::Identifier::from(&trait_bound.path),
+        syn::TypeParamBound::Lifetime(_) => 
+            synerr!("Unsupported trait bounds for associated type: {}", type_identifier.name()),
+        syn::TypeParamBound::Verbatim(_) => 
+            synerr!("Unsupported trait bounds for associated type: {}", type_identifier.name()),
+        _ =>
+            synerr!("Unsupported trait bounds for associated type: {}", type_identifier.name())
+    };
+
+    let partial_associated_type = model::AssociatedTypePartial{
+        name: type_identifier.name().to_owned(),
+        trait_identifier,
+        matched: false
+    };
+
+    partial_types.push(partial_associated_type);
+
+    Ok(())
+}
+
+fn clean_helper_attributes(trait_input: &mut syn::ItemTrait) -> syn::Result<()> {
     // strip out all #enumtrait helper attributes
-    for trait_item in &mut item.items {
+    for trait_item in &mut trait_input.items {
         match trait_item {
             syn::TraitItem::Fn(func) => {
                 let mut count = 0;  
@@ -235,9 +253,7 @@ pub(crate) fn parse_enumtrait_macro(attr: proc_macro2::TokenStream, item: proc_m
         }
     }
 
-    Ok(EnumTraitMacroOutput {
-        tokens: item.to_token_stream(),
-        model: model::EnumTrait::new(identifier, methods, types)
-    })
+    Ok(())
 }
+
 

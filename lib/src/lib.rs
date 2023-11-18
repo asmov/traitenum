@@ -41,9 +41,7 @@ macro_rules! synerr {
     };
     ($message:literal, $($v:expr),+) => {
         return Err(syn::Error::new(::proc_macro2::Span::call_site(), format!("{}{}", ERROR_PREFIX, format!($message
-        $(
-            , $v
-        )+
+            $(,$v)+
         ))))
     };
 }
