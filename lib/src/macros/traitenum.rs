@@ -247,21 +247,41 @@ fn build_relation_iterators(
         .map(|associated_type| {
             let iterator_ident = syn::Ident::new(&format!("{}Iterator", associated_type.name()), span!());
             let traitenum_ident = syn::Ident::new(traitenum.identifier().name(), span!());
-            let _next_ordinal_match_body = quote::quote!{};
 
+            // Build the match body for the Iterator's next(). This simply maps a traitenum variant by its ordinal.
+            let mut ordinal: usize = 0;
+            let next_ordinal_match_body = traitenum.variants().iter().map(|variant| {
+                let variant_ident = syn::Ident::new(variant.name(), span!());
+                let output = quote::quote!{
+                    #ordinal => ::std::option::Option::Some(#traitenum_ident::#variant_ident),
+                };
+
+                ordinal += 1;
+                output
+            });
+
+            // Build the Iterator struct, it's new function, and it's Iterator implementation for the traitenum.
             quote::quote!{
                 struct #iterator_ident {
                     next_ordinal: usize
                 }
 
+                impl #iterator_ident {
+                    fn new() -> Self {
+                        Self {
+                            next_ordinal: 0
+                        }
+                    }
+                }
+
                 impl ::std::iter::Iterator for #iterator_ident {
                     type Item = #traitenum_ident;
 
-                    fn next(&mut self) -> Option<Self::Item> {
-                        //match self.next_ordinal {
-                            //#next_ordinal_match_body
-                            todo!()
-                        //}
+                    fn next(&mut self) -> std::option::Option<Self::Item> {
+                        match self.next_ordinal {
+                            #(#next_ordinal_match_body)*
+                            _ => ::std::option::Option::None
+                        }
                     }
                 }
             }
