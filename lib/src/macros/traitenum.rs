@@ -243,7 +243,7 @@ fn build_relation_iterators(
     traitenum: &model::TraitEnum) -> syn::Result<Vec<proc_macro2::TokenStream>>
 {
     let structs = enumtrait.types().iter()
-        .filter(|t| t.relationship() == model::Relationship::ManyToOne)
+        .filter(|t| t.relationship() == model::Relationship::OneToMany)
         .map(|associated_type| {
             let iterator_ident = syn::Ident::new(&format!("{}Iterator", associated_type.name()), span!());
             let traitenum_ident = syn::Ident::new(traitenum.identifier().name(), span!());
