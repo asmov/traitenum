@@ -4,9 +4,8 @@ use proc_macro2;
 
 use crate::{
     model, model::parse,
-    synerr, mksynerr,
+    synerr, mksynerr, span,
     ERROR_PREFIX, ENUM_ATTRIBUTE_HELPER_NAME};
-
 
 #[derive(Debug)]
 pub(crate) struct TraitEnumMacroOutput {
@@ -15,8 +14,9 @@ pub(crate) struct TraitEnumMacroOutput {
 }
 
 pub fn traitenum_derive_macro(
-        item: proc_macro2::TokenStream,
-        model_bytes: &[u8]) -> Result<proc_macro2::TokenStream, syn::Error> {
+    item: proc_macro2::TokenStream,
+    model_bytes: &[u8]) -> Result<proc_macro2::TokenStream, syn::Error>
+{
     let TraitEnumMacroOutput { tokens, model: _model } = parse_traitenum_macro(item, model_bytes)?;
     Ok(tokens)
 }
@@ -26,12 +26,12 @@ pub(crate) fn parse_traitenum_macro(
     enumtrait_model_bytes: &[u8]) -> Result<TraitEnumMacroOutput, syn::Error>
 {
     let enumtrait = model::EnumTrait::deserialize(enumtrait_model_bytes).unwrap();
+    let trait_ident = syn::Ident::new(enumtrait.identifier().name(), proc_macro2::Span::call_site());
     let input: syn::DeriveInput = syn::parse2(item)?;
     // the actual parsing is done with this call, the rest is building a tokenstream
     let traitenum = parse_traitenum_model(&input, &enumtrait)?;
-    let trait_ident = syn::Ident::new(enumtrait.identifier().name(), proc_macro2::Span::call_site());
-    let data_enum = data_enum(&input)?;
 
+    let data_enum = data_enum(&input)?;
     // write a method for each one defined by the enum trait, which returns the value defined by each enum variant
     let method_outputs = enumtrait.methods().iter().map(|method| {
         let method_name = method.name();
@@ -106,6 +106,8 @@ pub(crate) fn parse_traitenum_macro(
         }
     });
 
+    let relation_iterators_outputs = build_relation_iterators(&enumtrait, &traitenum)?;
+
     let input_ident = &input.ident;
 
     let output = quote::quote!{
@@ -113,6 +115,8 @@ pub(crate) fn parse_traitenum_macro(
             #(#type_outputs)*
             #(#method_outputs)*
         }
+
+        #(#relation_iterators_outputs)*
     };
 
     Ok(TraitEnumMacroOutput {
@@ -231,5 +235,39 @@ fn parse_traitenum_model(input: &syn::DeriveInput, enumtrait: &model::EnumTrait)
     }
 
     Ok(traitenum_build.build())
+}
+
+// Creates iterator structs and implementations for many-to-many relations
+fn build_relation_iterators(
+    enumtrait: &model::EnumTrait,
+    traitenum: &model::TraitEnum) -> syn::Result<Vec<proc_macro2::TokenStream>>
+{
+    let structs = enumtrait.types().iter()
+        .filter(|t| t.relationship() == model::Relationship::ManyToOne)
+        .map(|associated_type| {
+            let iterator_ident = syn::Ident::new(&format!("{}Iterator", associated_type.name()), span!());
+            let traitenum_ident = syn::Ident::new(traitenum.identifier().name(), span!());
+            let _next_ordinal_match_body = quote::quote!{};
+
+            quote::quote!{
+                struct #iterator_ident {
+                    next_ordinal: usize
+                }
+
+                impl ::std::iter::Iterator for #iterator_ident {
+                    type Item = #traitenum_ident;
+
+                    fn next(&mut self) -> Option<Self::Item> {
+                        //match self.next_ordinal {
+                            //#next_ordinal_match_body
+                            todo!()
+                        //}
+                    }
+                }
+            }
+        })
+        .collect();
+
+    Ok(structs)
 }
 

@@ -77,23 +77,31 @@ pub(crate) struct AssociatedTypePartial {
 pub struct AssociatedType {
     name: String,
     relation_name: String,
-    trait_identifier: Identifier
+    trait_identifier: Identifier,
+    relationship: Relationship
 }
 
 impl AssociatedType {
     pub fn name(&self) -> &str { &self.name }
     pub fn relation_name(&self) -> &str { &self.relation_name }
     pub fn trait_identifier(&self) -> &Identifier { &self.trait_identifier }
+    pub fn relationship(&self) -> Relationship { self.relationship }
 
     pub fn valid_return_type_id(identifier: &Identifier) -> bool {
         identifier.path.len() == 1 && identifier.path[1] == "Self"
     }
 
-    pub const fn new(name: String, relation_name: String, trait_identifier: Identifier) -> Self {
+    pub const fn new(
+        name: String,
+        relation_name: String,
+        trait_identifier: Identifier,
+        relationship: Relationship) -> Self
+    {
         Self {
             name,
             relation_name: relation_name,
-            trait_identifier
+            trait_identifier,
+            relationship
         }
     }
 }
@@ -567,7 +575,7 @@ impl TypeAttributeDefinition {
 }
 
 
-#[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(Copy, Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum Relationship {
     OneToOne,
     OneToMany,

@@ -50,7 +50,9 @@ pub(crate) fn parse_enumtrait_macro(
     // We only support trait methods and trait types. Everything else is either ignored or denied
     for trait_item in &trait_input.items {
         match trait_item {
+            // Build a model Method
             syn::TraitItem::Fn(func) => parse_trait_fn(&mut methods, func)?,
+            // Partially build a model AssociatedType. We'll finalize with a second pass after the loop.
             syn::TraitItem::Type(type_item) => parse_trait_type(&mut partial_types, type_item)?,
             _ => ()
         }
@@ -125,8 +127,10 @@ fn parse_trait_fn_return(func: &syn::TraitItemFn) -> syn::Result<(model::ReturnT
         syn::ReturnType::Default => synerr!("Default return types () are not supported"),
         syn::ReturnType::Type(_, ref returntype) => match **returntype {
             syn::Type::Path(ref path_type) => {
+                // This will work for the primitize types that we support (usize, f32, bool, etc.).
                 match model::ReturnType::try_from(&path_type.path) {
                     Ok(v) => return_type = Some(v),
+                    // We model anything else as a ReturnType::Type. We convert the type's path to a model Identifier.
                     Err(_) => {
                         return_type = Some(model::ReturnType::Type);
                         return_type_identifier = match model::Identifier::try_from(&path_type.path) {
@@ -137,6 +141,7 @@ fn parse_trait_fn_return(func: &syn::TraitItemFn) -> syn::Result<(model::ReturnT
                     }
                                                     };
             },
+            // As for reference return types, we only support &'static str at the moment.
             syn::Type::Reference(ref ref_type) => {
                 // only elided and static lifetimes are supported
                 let _has_static_lifetime = match &ref_type.lifetime {
@@ -150,33 +155,30 @@ fn parse_trait_fn_return(func: &syn::TraitItemFn) -> syn::Result<(model::ReturnT
                     None => false
                 };
 
-                // mutability isn not supported
+                // mutability is not supported
                 if ref_type.mutability.is_some() {
                     synerr!("Mutable return types are not supported")
                 }
 
-                match *ref_type.elem {
-                    syn::Type::Path(ref path_type) => {
-                        if let Some(ident) = path_type.path.get_ident() {
-                            if "str" == ident.to_string() {
-                                return_type = Some(model::ReturnType::StaticStr);
-                            }
+                // basically just ensure that the ident is a "str"
+                if let syn::Type::Path(ref path_type) = *ref_type.elem {
+                    if let Some(ident) = path_type.path.get_ident() {
+                        if "str" == ident.to_string() {
+                            return_type = Some(model::ReturnType::StaticStr);
                         }
+                    }
+                }
 
-                        if return_type.is_none() {
-                            todo!("lookup the return reference type");
-                        }
-                    },
-                    _ => synerr!("Unsupported return reference type: {}",
-                            ref_type.to_token_stream().to_string())
+                // ... the else statement for each nested if statement above
+                if return_type.is_none() {
+                    synerr!("Unsupported return reference type: {}", ref_type.to_token_stream().to_string())
                 }
             },
-            _ => todo!("Unimplemented trait return type"),
+            _ => synerr!("Unimplemented trait return type"),
         }
     }
 
-    let return_type = return_type.ok_or(mksynerr!("Uable to parse return type!!"))?;
-
+    let return_type = return_type.expect("Unable to parse return type");
     Ok((return_type, return_type_identifier))
 }
 
@@ -265,7 +267,8 @@ fn build_associated_types(
         let associated_type = model::AssociatedType::new(
             partial_type.name.to_owned(),
             method.name().to_owned(),
-            partial_type.trait_identifier.to_owned());
+            partial_type.trait_identifier.to_owned(),
+            *relation_def.relationship.as_ref().unwrap());
 
         types.push(associated_type);
         partial_type.matched = true;
