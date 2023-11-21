@@ -15,6 +15,17 @@ impl EnumTrait {
     pub fn identifier(&self) -> &Identifier { &self.identifier }
     pub fn methods(&self) -> &[Method] { &self.methods }
     pub fn types(&self) -> &[AssociatedType] { &self.types }
+    
+    pub fn relation_methods(&self) -> Vec<(&Method, &RelationAttributeDefinition)> {
+        self.methods.iter()
+            .filter_map(|method|
+                match method.attribute_definition {
+                    AttributeDefinition::Relation(ref relation_def) => Some((method, relation_def)),
+                    _ => None
+                }
+            )
+            .collect()
+    }
 
     pub const fn new(identifier: Identifier, methods: Vec<Method>, types: Vec<AssociatedType>) -> Self {
         Self {
@@ -78,14 +89,14 @@ pub struct AssociatedType {
     name: String,
     relation_name: String,
     trait_identifier: Identifier,
-    relationship: Relationship
+    relationship: RelationNature
 }
 
 impl AssociatedType {
     pub fn name(&self) -> &str { &self.name }
     pub fn relation_name(&self) -> &str { &self.relation_name }
     pub fn trait_identifier(&self) -> &Identifier { &self.trait_identifier }
-    pub fn relationship(&self) -> Relationship { self.relationship }
+    pub fn relationship(&self) -> RelationNature { self.relationship }
 
     pub fn valid_return_type_id(identifier: &Identifier) -> bool {
         identifier.path.len() == 1 && identifier.path[1] == "Self"
@@ -95,7 +106,7 @@ impl AssociatedType {
         name: String,
         relation_name: String,
         trait_identifier: Identifier,
-        relationship: Relationship) -> Self
+        relationship: RelationNature) -> Self
     {
         Self {
             name,
@@ -393,11 +404,11 @@ impl AttributeDefinition {
 
     pub fn needs_value(&self) -> bool {
         match self {
-            AttributeDefinition::Relation(ref reldef) => match &reldef.relationship {
+            AttributeDefinition::Relation(ref reldef) => match &reldef.nature {
                 Some(relationship) => match relationship {
-                    Relationship::OneToOne => false,
-                    Relationship::OneToMany => true,
-                    Relationship::ManyToOne => false,
+                    RelationNature::OneToOne => false,
+                    RelationNature::OneToMany => true,
+                    RelationNature::ManyToOne => false,
                 },
                 None => true,
             },
@@ -576,13 +587,13 @@ impl TypeAttributeDefinition {
 
 
 #[derive(Copy, Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
-pub enum Relationship {
+pub enum RelationNature {
     OneToOne,
     OneToMany,
     ManyToOne
 }
 
-impl FromStr for Relationship {
+impl FromStr for RelationNature {
     type Err = ();
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -595,10 +606,31 @@ impl FromStr for Relationship {
     }
 }
 
+#[derive(Copy, Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub enum Dispatch {
+    Static,
+    Dynamic
+}
+
+impl FromStr for Dispatch {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "Static" => Ok(Self::Static),
+            "Dynamic" => Ok(Self::Dynamic),
+            _ => Err(())
+        }
+    }
+}
+
+
+
 #[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct RelationAttributeDefinition {
     identifier: Identifier,
-    pub(crate) relationship: Option<Relationship>,
+    dispatch: Option<Dispatch>,
+    pub(crate) nature: Option<RelationNature>,
 }
 
 impl RelationAttributeDefinition {
@@ -609,14 +641,13 @@ impl RelationAttributeDefinition {
     pub fn new(identifier: Identifier) -> Self {
         Self {
             identifier,
-            relationship: None,
-            //one: None,
-            //many: None
+            nature: None,
+            dispatch: Some(Dispatch::Dynamic)
         }
     }
 
     pub fn validate(&self) -> Result<(), &str> {
-        match self.relationship {
+        match self.nature {
             /*Some(Relationship::OneToOne) => {
                 if self.one.is_none() {
                     return Err("Missing property for One-to-One Rel definition: one")

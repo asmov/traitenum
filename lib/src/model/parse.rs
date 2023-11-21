@@ -177,7 +177,7 @@ fn parse_string_attribute_definition(
     Ok(())
 }
 
-const DEFINITION_RELATIONSHIP: &'static str = "relationship";
+const DEFINITION_NATURE: &'static str = "nature";
 
 fn parse_relation_attribute_definition(
         def: &mut model::AttributeDefinition,
@@ -190,11 +190,11 @@ fn parse_relation_attribute_definition(
     };
 
     match name {
-       DEFINITION_RELATIONSHIP => {
+       DEFINITION_NATURE => {
             let variant_name = content.parse::<syn::Ident>()?.to_string();
-            let relationship = model::Relationship::from_str(&variant_name)
+            let relationship = model::RelationNature::from_str(&variant_name)
                 .or(Err(mksynerr!("Unknown relationship: {}", variant_name)))?;
-            reldef.relationship = Some(relationship);
+            reldef.nature = Some(relationship);
        },
        _ => synerr!("Unknown property for definition {}: {}", model::RelationAttributeDefinition::DEFINITION_NAME, name)
     }

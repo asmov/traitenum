@@ -43,10 +43,6 @@ mod tests {
 
         let item_src = quote::quote!{
             pub trait MyTrait {
-                // test Rels
-                type ManyToOneEnum: ManyToOneTrait;
-                type OneToManyEnum: OneToManyTrait;
-
                 // test Str default
                 #[enumtrait::Str(default(":)"))]
                 fn str_default(&self) -> &'static str;
@@ -66,10 +62,10 @@ mod tests {
                 #[enumtrait::Num(preset(Serial), start(3), increment(2))]
                 fn num_preset_serial_all(&self) -> u64;
                 // test Rel many-to-one
-                #[enumtrait::Rel(relationship(ManyToOne))]
-                fn many_to_one(&self) -> Self::ManyToOneEnum;
-                #[enumtrait::Rel(relationship(OneToMany))]
-                fn one_to_many(&self) -> Self::OneToManyEnum;
+                #[enumtrait::Rel(nature(ManyToOne))]
+                fn many_to_one(&self) -> Box<dyn ParentTrait>;
+                #[enumtrait::Rel(nature(OneToMany))]
+                fn one_to_many(&self) -> Box<dyn Iterator<Item = dyn ChildTrait>>;
                 // test default implementation
                 fn default_implementation(&self) {
                     todo!();

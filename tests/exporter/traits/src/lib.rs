@@ -15,7 +15,7 @@ pub trait ParentTrait {
     #[enumtrait::Str(preset(Variant))]
     fn name(&self) -> &'static str;
 
-    #[enumtrait::Rel(nature(OneToMany), dispatch(Dynamic))]
+    #[enumtrait::Rel(nature(OneToMany))]
     fn children(&self) -> Box<dyn Iterator<dyn ChildTrait<ParentTraitEnum = Self>>>;
 
     #[enumtrait::Rel(nature(OneToMany), dispatch(Static))]

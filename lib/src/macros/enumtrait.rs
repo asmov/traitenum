@@ -268,7 +268,7 @@ fn build_associated_types(
             partial_type.name.to_owned(),
             method.name().to_owned(),
             partial_type.trait_identifier.to_owned(),
-            *relation_def.relationship.as_ref().unwrap());
+            *relation_def.nature.as_ref().unwrap());
 
         types.push(associated_type);
         partial_type.matched = true;
