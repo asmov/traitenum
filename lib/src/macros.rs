@@ -63,9 +63,14 @@ mod tests {
                 fn num_preset_serial_all(&self) -> u64;
                 // test Rel many-to-one
                 #[enumtrait::Rel(nature(ManyToOne))]
-                fn many_to_one(&self) -> Box<dyn ParentTrait>;
-                #[enumtrait::Rel(nature(OneToMany))]
-                fn one_to_many(&self) -> Box<dyn Iterator<Item = dyn ChildTrait>>;
+                fn many_to_one(&self) -> Box<dyn FirstOneTrait>;
+                // test Rel implied many-to-one
+                fn many_to_one(&self) -> Box<dyn SecondOneTrait>;
+                // test Rel one-to-many explicit nature and dispatch
+                #[enumtrait::Rel(nature(OneToMany), dispatch(Dynamic))]
+                fn one_to_many(&self) -> Box<dyn Iterator<Item = dyn FirstManyTrait>>;
+                // test implied one-to-many Rel()
+                fn one_to_many_implied(&self) -> Box<dyn Iterator<Item = dyn SecondManyTrait>>;
                 // test default implementation
                 fn default_implementation(&self) {
                     todo!();
@@ -120,7 +125,7 @@ mod tests {
 
     #[test]
     fn test_parse_enumtrait_errors() {
-        let _simple_attribute_src = quote::quote!{
+        let simple_attribute_src = quote::quote!{
             crate::tests::MyTrait
         };
         let simple_item_src = quote::quote!{
@@ -138,6 +143,36 @@ mod tests {
         let attribute_src = quote::quote!{ crate::tests::TheirTrait };
         assert!(enumtrait::parse_enumtrait_macro(attribute_src, simple_item_src.clone()).is_err(),
             "Mismatched trait name and #[{}(<pathspec>)] identifier should throw an Error", TRAIT_ATTRIBUTE_HELPER_NAME);
+
+        let unimplemented_static_dispatch_src = quote::quote!{
+            pub trait MyTrait {
+                type ManyType: ManyTrait;
+
+                #[traitenum::Rel(dispatch(Static))]
+                fn many_to_one(&self) -> Self::ManyType;
+            }
+        };
+
+        assert!(enumtrait::parse_enumtrait_macro(
+            simple_attribute_src.clone(),
+            unimplemented_static_dispatch_src).is_err(),
+            "Static dispatch is not currently supported and should throw an Error");
+
+        let unimplemented_implied_static_dispatch_src = quote::quote!{
+            pub trait MyTrait {
+                type ManyType: ManyTrait;
+
+                fn many_to_one(&self) -> Self::ManyType;
+            }
+        };
+
+        assert!(enumtrait::parse_enumtrait_macro(
+            simple_attribute_src.clone(),
+            unimplemented_implied_static_dispatch_src).is_err(),
+            "Implied static dispatch is not currently supported and should throw an Error");
+
+        
+
     }
 
     #[test]
