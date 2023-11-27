@@ -119,6 +119,19 @@ fn parse_trait_fn(methods: &mut Vec<model::Method>, func: &syn::TraitItemFn) -> 
     Ok(())
 }
 
+fn try_parse_trait_fn_return_boxed_trait(
+    type_path: &syn::TypePath) -> syn::Result<(model::ReturnType, model::Identifier)>
+{
+    todo!()
+}
+
+fn try_parse_trait_fn_return_boxed_trait_iterator(
+    type_path: &syn::TypePath) -> syn::Result<(model::ReturnType, model::Identifier)>
+{
+    todo!()
+}
+
+
 fn parse_trait_fn_return(func: &syn::TraitItemFn) -> syn::Result<(model::ReturnType, Option<model::Identifier>)> {
     let mut return_type: Option<model::ReturnType> = None;
     let mut return_type_identifier: Option<model::Identifier> = None;
@@ -127,19 +140,28 @@ fn parse_trait_fn_return(func: &syn::TraitItemFn) -> syn::Result<(model::ReturnT
         syn::ReturnType::Default => synerr!("Default return types () are not supported"),
         syn::ReturnType::Type(_, ref returntype) => match **returntype {
             syn::Type::Path(ref path_type) => {
-                // This will work for the primitize types that we support (usize, f32, bool, etc.).
-                match model::ReturnType::try_from(&path_type.path) {
-                    Ok(v) => return_type = Some(v),
-                    // We model anything else as a ReturnType::Type. We convert the type's path to a model Identifier.
-                    Err(_) => {
-                        return_type = Some(model::ReturnType::Type);
-                        return_type_identifier = match model::Identifier::try_from(&path_type.path) {
-                            Ok(id) => Some(id),
-                            Err(_) => synerr!("Unsupported return type: {}",
-                                &path_type.path.to_token_stream().to_string())
-                        }
+                if let Ok(ret_type) = model::ReturnType::try_from(&path_type.path) {
+                    // This models primitive return types that ReturnType supports. E.g., usize, f32, bool, etc.
+                    return_type = Some(ret_type);
+                } else if let Ok((ret_type, ret_type_id)) = try_parse_trait_fn_return_boxed_trait(path_type) {
+                    // This models ReturnType::BoxedTrait. E.g.: Box<dyn MyTrait>
+                    // The trait is modeled as a model::Identifier.
+                    return_type = Some(ret_type);
+                    return_type_identifier = Some(ret_type_id);
+                } else if let Ok((ret_type, ret_type_id)) = try_parse_trait_fn_return_boxed_trait_iterator(path_type) {
+                    // This models ReturnType::BoxedTraitIterator. E.g.: Box<dyn Iterator<Item = dyn MyTrait>>
+                    // The trait is modeled as a model::Identifier.
+                    return_type = Some(ret_type);
+                    return_type_identifier = Some(ret_type_id);
+                } else {
+                    // Anything else is modeled as ReturnType::Type, including enums.
+                    return_type = Some(model::ReturnType::Type);
+                    return_type_identifier = match model::Identifier::try_from(&path_type.path) {
+                        Ok(id) => Some(id),
+                        Err(_) => synerr!("Unsupported return type: {}",
+                            &path_type.path.to_token_stream().to_string())
                     }
-                                                    };
+                }
             },
             // As for reference return types, we only support &'static str at the moment.
             syn::Type::Reference(ref ref_type) => {

@@ -183,11 +183,9 @@ fn parse_relation_attribute_definition(
         def: &mut model::AttributeDefinition,
         name: &str,
         content: syn::parse::ParseBuffer,
-        _return_type: model::ReturnType) -> Result<(), syn::Error> {
-    let reldef = match def {
-        model::AttributeDefinition::Relation(def) => def,
-        _ => unreachable!("Unexpected definition type: {}", model::RelationAttributeDefinition::DEFINITION_NAME)
-    };
+        _return_type: model::ReturnType) -> syn::Result<()>
+{
+    let reldef = def.get_relation_definition_mut();
 
     match name {
        DEFINITION_NATURE => {
@@ -200,6 +198,15 @@ fn parse_relation_attribute_definition(
     }
 
     Ok(())
+}
+
+impl model::AttributeDefinition {
+    fn get_relation_definition_mut(&mut self) -> &mut model::RelationAttributeDefinition {
+        match self {
+            Self::Relation(ref mut def) => def,
+            _ => unreachable!("Unexpected definition type: {}", model::RelationAttributeDefinition::DEFINITION_NAME)
+        }
+    }
 }
 
 

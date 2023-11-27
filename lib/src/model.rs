@@ -130,7 +130,9 @@ pub enum ReturnType {
     Integer32,
     Float32,
     Byte,
-    Type,
+    //BoxedTrait,
+    //BoxedTraitIterator
+    Type
 }
 
 impl Display for ReturnType {
