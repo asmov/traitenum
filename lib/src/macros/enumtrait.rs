@@ -119,16 +119,78 @@ fn parse_trait_fn(methods: &mut Vec<model::Method>, func: &syn::TraitItemFn) -> 
     Ok(())
 }
 
-fn try_parse_trait_fn_return_boxed_trait(
-    type_path: &syn::TypePath) -> syn::Result<(model::ReturnType, model::Identifier)>
+const IDENT_BOX: &'static str = "Box";
+const IDENT_ITERATOR: &'static str = "Iterator";
+const IDENT_ITEM: &'static str = "Item";
+
+fn try_parse_trait_fn_return_boxed(
+    type_path: &syn::TypePath) -> syn::Result<Option<(model::ReturnType, model::Identifier)>>
 {
-    todo!()
+    if type_path.path.segments[0].ident != IDENT_BOX {
+        return Ok(None)
+    }
+
+    let bracket_args = match &type_path.path.segments[0].arguments {
+        syn::PathArguments::AngleBracketed(v) => v,
+        _ => synerr!("Invalid use of Box: {}", type_path.to_token_stream())
+    };
+
+    let arg_type = match &bracket_args.args[0] {
+        syn::GenericArgument::Type(v) => v,
+        _ => synerr!("Invalid use of Box: {}", type_path.to_token_stream())
+    };
+
+    let trait_path = match arg_type {
+        syn::Type::TraitObject(v) => v,
+        _ => synerr!("Unsupported use of Box. Only <dyn EnumTrait> arguments allowed: {}", type_path.to_token_stream())
+    };
+
+    let trait_bound = match trait_path.bounds[0] {
+        syn::TypeParamBound::Trait(ref v) => v,
+        _ => synerr!("Unsupported use of Box. Only <dyn EnumTrait> arguments allowed: {}", type_path.to_token_stream())
+    };
+
+    if trait_bound.path.segments[0].ident == IDENT_ITERATOR {
+        try_parse_trait_fn_return_boxed_trait_iterator(trait_bound)
+    } else {
+        let id = model::Identifier::try_from(&trait_bound.path)
+            .map_err(|e| mksynerr!("Unable to parse Boxed trait identifier: {} :: {}", e, trait_bound.path.to_token_stream()))?;
+
+        Ok(Some((model::ReturnType::BoxedTrait, id)))
+    }
 }
 
 fn try_parse_trait_fn_return_boxed_trait_iterator(
-    type_path: &syn::TypePath) -> syn::Result<(model::ReturnType, model::Identifier)>
+    trait_bound: &syn::TraitBound) -> syn::Result<Option<(model::ReturnType, model::Identifier)>>
 {
-    todo!()
+    let bracket_args = match &trait_bound.path.segments[0].arguments {
+        syn::PathArguments::AngleBracketed(v) => v,
+        _ => synerr!("Invalid use of Box<dyn Iterator>: {}", trait_bound.to_token_stream())
+    };
+
+    let arg_type = match &bracket_args.args[0] {
+        syn::GenericArgument::AssocType(v) => v,
+        _ => synerr!("Invalid use of Box<dyn Iterator>: {}", trait_bound.to_token_stream())
+    };
+
+    if arg_type.ident != IDENT_ITEM {
+        synerr!("Invalid use of Box<dyn Iterator>: {}", trait_bound.to_token_stream())
+    }
+
+    let trait_path = match arg_type.ty {
+        syn::Type::TraitObject(ref v) => v,
+        _ => synerr!("Unsupported use of Box<dyn Iterator>: {}", trait_bound.to_token_stream())
+    };
+
+    let item_trait_bound = match trait_path.bounds[0] {
+        syn::TypeParamBound::Trait(ref v) => v,
+        _ => synerr!("Unsupported use of Box<dyn Iterator>. Only <Item = dyn EnumTrait> arguments allowed: {}", trait_bound.to_token_stream())
+    };
+
+    let id = model::Identifier::try_from(&item_trait_bound.path)
+        .map_err(|e| mksynerr!("Unable to parse Boxed trait iterator identifier: {} :: {}", e, item_trait_bound.path.to_token_stream()))?;
+
+    Ok(Some((model::ReturnType::BoxedTraitIterator, id)))
 }
 
 
@@ -143,13 +205,8 @@ fn parse_trait_fn_return(func: &syn::TraitItemFn) -> syn::Result<(model::ReturnT
                 if let Ok(ret_type) = model::ReturnType::try_from(&path_type.path) {
                     // This models primitive return types that ReturnType supports. E.g., usize, f32, bool, etc.
                     return_type = Some(ret_type);
-                } else if let Ok((ret_type, ret_type_id)) = try_parse_trait_fn_return_boxed_trait(path_type) {
+                } else if let Some((ret_type, ret_type_id)) = try_parse_trait_fn_return_boxed(path_type)? {
                     // This models ReturnType::BoxedTrait. E.g.: Box<dyn MyTrait>
-                    // The trait is modeled as a model::Identifier.
-                    return_type = Some(ret_type);
-                    return_type_identifier = Some(ret_type_id);
-                } else if let Ok((ret_type, ret_type_id)) = try_parse_trait_fn_return_boxed_trait_iterator(path_type) {
-                    // This models ReturnType::BoxedTraitIterator. E.g.: Box<dyn Iterator<Item = dyn MyTrait>>
                     // The trait is modeled as a model::Identifier.
                     return_type = Some(ret_type);
                     return_type_identifier = Some(ret_type_id);

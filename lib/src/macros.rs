@@ -61,16 +61,17 @@ mod tests {
                 // test Num serial preset w/start and increment 
                 #[enumtrait::Num(preset(Serial), start(3), increment(2))]
                 fn num_preset_serial_all(&self) -> u64;
-                // test Rel many-to-one
-                #[enumtrait::Rel(nature(ManyToOne))]
-                fn many_to_one(&self) -> Box<dyn FirstOneTrait>;
-                // test Rel implied many-to-one
-                fn many_to_one(&self) -> Box<dyn SecondOneTrait>;
-                // test Rel one-to-many explicit nature and dispatch
+                // test Rel dynamic many-to-one
+                #[enumtrait::Rel(nature(ManyToOne), dispatch(Dynamic))]
+                fn many_to_one_dyn(&self) -> Box<dyn FirstOneTrait>;
+                 // test Rel dynamic one-to-many
                 #[enumtrait::Rel(nature(OneToMany), dispatch(Dynamic))]
-                fn one_to_many(&self) -> Box<dyn Iterator<Item = dyn FirstManyTrait>>;
-                // test implied one-to-many Rel()
-                fn one_to_many_implied(&self) -> Box<dyn Iterator<Item = dyn SecondManyTrait>>;
+                fn one_to_many_dyn(&self) -> Box<dyn Iterator<Item = dyn FirstManyTrait>>;
+                // test elided Rel dynamic one-to-many
+                fn one_to_many_elided_dyn(&self) -> Box<dyn Iterator<Item = dyn SecondManyTrait>>;
+                // test Rel many-to-one dynamic (elided)
+                #[enumtrait::Rel(nature(ManyToOne))]
+                fn many_to_one_dynelide(&self) -> Box<dyn SecondOneTrait>;
                 // test default implementation
                 fn default_implementation(&self) {
                     todo!();

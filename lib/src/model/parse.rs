@@ -22,6 +22,7 @@ impl From<&syn::Ident> for model::Identifier{
 
 impl From<&syn::Path> for model::Identifier{
     fn from(path: &syn::Path) -> Self {
+        //TODO: fail if path.args are found
         let mut path = path.clone();
         let name = path.segments.pop().unwrap()
             .value().ident.to_string();
@@ -178,6 +179,7 @@ fn parse_string_attribute_definition(
 }
 
 const DEFINITION_NATURE: &'static str = "nature";
+const DEFINITION_DISPATCH: &'static str = "dispatch";
 
 fn parse_relation_attribute_definition(
         def: &mut model::AttributeDefinition,
@@ -188,27 +190,23 @@ fn parse_relation_attribute_definition(
     let reldef = def.get_relation_definition_mut();
 
     match name {
-       DEFINITION_NATURE => {
+        DEFINITION_NATURE => {
             let variant_name = content.parse::<syn::Ident>()?.to_string();
             let relationship = model::RelationNature::from_str(&variant_name)
                 .or(Err(mksynerr!("Unknown relationship: {}", variant_name)))?;
             reldef.nature = Some(relationship);
-       },
-       _ => synerr!("Unknown property for definition {}: {}", model::RelationAttributeDefinition::DEFINITION_NAME, name)
+        },
+        DEFINITION_DISPATCH => {
+            let variant_name = content.parse::<syn::Ident>()?.to_string();
+            let dispatch = model::Dispatch::from_str(&variant_name)
+                .or(Err(mksynerr!("Unknown dispatch: {}", variant_name)))?;
+            reldef.dispatch = Some(dispatch);
+        },
+        _ => synerr!("Unknown property for definition {}: {}", model::RelationAttributeDefinition::DEFINITION_NAME, name)
     }
 
     Ok(())
 }
-
-impl model::AttributeDefinition {
-    fn get_relation_definition_mut(&mut self) -> &mut model::RelationAttributeDefinition {
-        match self {
-            Self::Relation(ref mut def) => def,
-            _ => unreachable!("Unexpected definition type: {}", model::RelationAttributeDefinition::DEFINITION_NAME)
-        }
-    }
-}
-
 
 fn parse_number_attribute_definition(
         def: &mut model::AttributeDefinition,
@@ -409,6 +407,8 @@ impl quote::ToTokens for model::ReturnType{
                 model::ReturnType::Float32 => quote::quote!{ f32 },
                 model::ReturnType::Byte => quote::quote!{ u8 },
                 // this has to be handled conditionally
+                model::ReturnType::BoxedTrait => unreachable!("ReturnType::BoxedTrait cannot directly produce a TokenStream"),
+                model::ReturnType::BoxedTraitIterator=> unreachable!("ReturnType::BoxedTraitIterator cannot directly produce a TokenStream"),
                 model::ReturnType::Type => unreachable!("ReturnType::Type cannot directly produce a TokenStream")
             }
         );

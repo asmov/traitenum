@@ -130,8 +130,8 @@ pub enum ReturnType {
     Integer32,
     Float32,
     Byte,
-    //BoxedTrait,
-    //BoxedTraitIterator
+    BoxedTrait,
+    BoxedTraitIterator,
     Type
 }
 
@@ -148,6 +148,8 @@ impl Display for ReturnType {
             ReturnType::Integer32 => write!(f, "i32"),
             ReturnType::Float32 => write!(f, "f32"),
             ReturnType::Byte => write!(f, "u8"),
+            ReturnType::BoxedTrait => write!(f, "Box<dyn Trait>"),
+            ReturnType::BoxedTraitIterator => write!(f, "Box<dyn Iterator<Item = dyn Trait>"),
             ReturnType::Type => write!(f, "<Type>"),
         }
     }
@@ -245,6 +247,39 @@ impl AttributeDefinition {
             ReturnType::Byte => {
                 chk_defname!(NumberAttributeDefinition::<u8>::DEFINITION_NAME);
                 AttributeDefinition::Byte(NumberAttributeDefinition::new())
+            },
+            ReturnType::BoxedTrait => {
+                let id = return_identifier.ok_or("Missing Identifier for ReturnType::BoxedTrait")?;
+                match definition_name {
+                    Some("Rel") | None => {
+                        let mut attr_def = AttributeDefinition::Relation(RelationAttributeDefinition::new(id));
+                        let rel_def = attr_def.get_relation_definition_mut();
+                        rel_def.dispatch = Some(Dispatch::Dynamic);
+                        attr_def
+                    },
+                    Some(s) => {
+                        return Err(format!(
+                            "Definition type `{}` is incompatible with return type `{}`",
+                            s, return_type)) 
+                    } 
+                }
+            },
+            ReturnType::BoxedTraitIterator => {
+                let id = return_identifier.ok_or("Missing Identifier for ReturnType::BoxedTraitIterator")?;
+                match definition_name {
+                    Some("Rel") | None => {
+                        let mut attr_def = AttributeDefinition::Relation(RelationAttributeDefinition::new(id));
+                        let rel_def = attr_def.get_relation_definition_mut();
+                        rel_def.dispatch = Some(Dispatch::Dynamic);
+                        rel_def.nature = Some(RelationNature::OneToMany);
+                        attr_def
+                    },
+                    Some(s) => {
+                        return Err(format!(
+                            "Definition type `{}` is incompatible with return type `{}`",
+                            s, return_type)) 
+                    } 
+                }
             },
             ReturnType::Type => {
                 let id = return_identifier.ok_or("Missing Identifier for ReturnType::Type")?;
@@ -438,6 +473,13 @@ impl AttributeDefinition {
             AttributeDefinition::FieldlessEnum(enumdef) => enumdef.validate(),
             AttributeDefinition::Relation(reldef) => reldef.validate(),
             AttributeDefinition::Type(_) => unreachable!("Type definitions should not be directly accessible"),
+        }
+    }
+
+    pub fn get_relation_definition_mut(&mut self) -> &mut RelationAttributeDefinition {
+        match self {
+            Self::Relation(ref mut def) => def,
+            _ => unreachable!("Unexpected definition type: {}", RelationAttributeDefinition::DEFINITION_NAME)
         }
     }
 }
@@ -644,7 +686,7 @@ impl RelationAttributeDefinition {
         Self {
             identifier,
             nature: None,
-            dispatch: Some(Dispatch::Dynamic)
+            dispatch: None
         }
     }
 
