@@ -5,6 +5,10 @@ pub trait SimpleTrait {
     #[enumtrait::Str(default("spunko"))]
     fn name(&self) -> &'static str;
     fn column(&self) -> usize;
+
+    fn default_impl(&self) -> String {
+        format!("{} :: {}", self.name(), self.column())
+    }
 }
 
 #[enumtrait(crate::ParentTrait)]
@@ -13,11 +17,14 @@ pub trait ParentTrait {
     fn name(&self) -> &'static str;
 
     #[enumtrait::Rel(nature(OneToMany))]
-    fn children(&self) -> Box<dyn Iterator<Item = dyn ChildTrait>>;
+    fn children(&self) -> Box<dyn Iterator<Item = Box<dyn ChildTrait>>>;
 }
 
 #[enumtrait(crate::ChildTrait)]
 pub trait ChildTrait {
+    #[enumtrait::Str(preset(Variant))]
+    fn topic(&self) -> &'static str;
+
     #[enumtrait::Num(preset(Ordinal))]
     fn ordinal(&self) -> usize;
 

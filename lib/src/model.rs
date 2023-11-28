@@ -132,6 +132,8 @@ pub enum ReturnType {
     Byte,
     BoxedTrait,
     BoxedTraitIterator,
+    AssociatedType,
+    Enum,
     Type
 }
 
@@ -150,6 +152,8 @@ impl Display for ReturnType {
             ReturnType::Byte => write!(f, "u8"),
             ReturnType::BoxedTrait => write!(f, "Box<dyn Trait>"),
             ReturnType::BoxedTraitIterator => write!(f, "Box<dyn Iterator<Item = dyn Trait>"),
+            ReturnType::AssociatedType => write!(f, "<Self::Type>"),
+            ReturnType::Enum => write!(f, "<Enum>"),
             ReturnType::Type => write!(f, "<Type>"),
         }
     }
@@ -249,6 +253,7 @@ impl AttributeDefinition {
                 AttributeDefinition::Byte(NumberAttributeDefinition::new())
             },
             ReturnType::BoxedTrait => {
+                chk_defname!(RelationAttributeDefinition::DEFINITION_NAME);
                 let id = return_identifier.ok_or("Missing Identifier for ReturnType::BoxedTrait")?;
                 match definition_name {
                     Some("Rel") | None => {
@@ -265,6 +270,7 @@ impl AttributeDefinition {
                 }
             },
             ReturnType::BoxedTraitIterator => {
+                chk_defname!(RelationAttributeDefinition::DEFINITION_NAME);
                 let id = return_identifier.ok_or("Missing Identifier for ReturnType::BoxedTraitIterator")?;
                 match definition_name {
                     Some("Rel") | None => {
@@ -281,17 +287,39 @@ impl AttributeDefinition {
                     } 
                 }
             },
+            ReturnType::AssociatedType => {
+                chk_defname!(RelationAttributeDefinition::DEFINITION_NAME);
+                let id = return_identifier.ok_or("Missing Identifier for ReturnType::AssociatedType")?;
+                let mut reldef = RelationAttributeDefinition::new(id);
+                reldef.dispatch = Some(Dispatch::Static);
+                AttributeDefinition::Relation(reldef)
+            },
+            // Enums will never be implied as their type cannot be determined without reflection
+            // This is here for posterity
+            ReturnType::Enum => {
+                chk_defname!(FieldlessEnumAttributeDefinition::DEFINITION_NAME);
+                let id = return_identifier.ok_or("Missing Identifier for ReturnType::Enum")?;
+                AttributeDefinition::FieldlessEnum(FieldlessEnumAttributeDefinition::new(id))
+            },
+            // Type is a catch-all for return types that cannot be implied: Enum 
             ReturnType::Type => {
                 let id = return_identifier.ok_or("Missing Identifier for ReturnType::Type")?;
                 match definition_name {
-                    Some("Enum") => AttributeDefinition::FieldlessEnum(FieldlessEnumAttributeDefinition::new(id)),
-                    Some("Rel") => AttributeDefinition::Relation(RelationAttributeDefinition::new(id)),
+                    // Enums will never be implied as their type cannot be determined without reflection
+                    // This is where Enums will actually be initialized (not the match arm for Enum above)
+                    Some(FieldlessEnumAttributeDefinition::DEFINITION_NAME) => {
+                        AttributeDefinition::FieldlessEnum(FieldlessEnumAttributeDefinition::new(id))
+                    },
                     Some(s) => {
                         return Err(format!(
-                            "Definition type `{}` is incompatible with return type `{}`",
-                            s, return_type)) 
+                            "Unknown definition type `{}` for return signature: {}",
+                            s, id)) 
                     },
-                    None => AttributeDefinition::Type(TypeAttributeDefinition::new(id))
+                    None => {
+                        return Err(format!(
+                            "Unable to determine implied definition type for return signature: {}",
+                            id)) 
+                    },
                 }
             },
         };
@@ -689,6 +717,7 @@ impl RelationAttributeDefinition {
 
     pub fn identifier(&self) -> &Identifier { &self.identifier }
     pub fn dispatch(&self) -> Option<Dispatch> { self.dispatch }
+    pub fn nature(&self) -> Option<RelationNature> { self.nature }
 
     pub fn new(identifier: Identifier) -> Self {
         Self {
@@ -699,14 +728,14 @@ impl RelationAttributeDefinition {
     }
 
     pub fn validate(&self) -> Result<(), &str> {
-        match self.nature {
-            Some(_) => {},
+        match self.dispatch{
+            Some(Dispatch::Dynamic) => {},
+            Some(Dispatch::Static) => return Err("Static dispatch is currently unimplemented"),
             None => return Err("Missing property for Rel definition: nature")
         }
 
-        match self.dispatch{
-            Some(Dispatch::Dynamic) => {},
-            Some(Dispatch::Static) => return  Err("Static dispatch is currently unimplemented"),
+        match self.nature {
+            Some(_) => {},
             None => return Err("Missing property for Rel definition: nature")
         }
 

@@ -135,10 +135,10 @@ mod tests {
 
                 // test Rel dynamic one-to-many
                 #[enumtrait::Rel(nature(OneToMany), dispatch(Dynamic))]
-                fn one_to_many_dyn(&self) -> Box<dyn Iterator<Item = dyn FirstManyTrait>>;
+                fn one_to_many_dyn(&self) -> Box<dyn Iterator<Item = Box<dyn FirstManyTrait>>>;
 
                 // test elided Rel dynamic one-to-many
-                fn one_to_many_elided_dyn(&self) -> Box<dyn Iterator<Item = dyn SecondManyTrait>>;
+                fn one_to_many_elided_dyn(&self) -> Box<dyn Iterator<Item = Box<dyn SecondManyTrait>>>;
             }
         };
         
@@ -166,8 +166,6 @@ mod tests {
 
         dbg!(&enum_model);
         dbg!(&enum_tokens.to_string());
-
-        // test defaults
     }
 
 
@@ -218,13 +216,5 @@ mod tests {
             simple_attribute_src.clone(),
             unimplemented_implied_static_dispatch_src).is_err(),
             "Implied static dispatch is not currently supported and should throw an Error");
-
-        
-
-    }
-
-    #[test]
-    fn test_traitenum_macro() {
-
     }
 }

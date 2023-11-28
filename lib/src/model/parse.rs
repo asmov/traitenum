@@ -2,7 +2,7 @@ use std::str::FromStr;
 use quote::{self, TokenStreamExt, ToTokens};
 use syn::{self, parse};
 
-use crate::{model, synerr, mksynerr, ERROR_PREFIX, TRAIT_ATTRIBUTE_HELPER_NAME};
+use crate::{model, synerr, mksynerr, span, ERROR_PREFIX, TRAIT_ATTRIBUTE_HELPER_NAME};
 
 impl parse::Parse for model::Identifier {
     fn parse(input: parse::ParseStream) -> syn::Result<Self> {
@@ -20,30 +20,31 @@ impl From<&syn::Ident> for model::Identifier{
     }
 }
 
-impl From<&syn::Path> for model::Identifier{
-    fn from(path: &syn::Path) -> Self {
-        //TODO: fail if path.args are found
-        let mut path = path.clone();
-        let name = path.segments.pop().unwrap()
-            .value().ident.to_string();
-        let path = path.segments.pairs()
-            .map(|pair| pair.value().ident.to_string())
-            .collect();
+impl TryFrom<&syn::Path> for model::Identifier {
+    type Error = &'static str;
 
-        Self::new(path, name)
+    fn try_from(path: &syn::Path) -> Result<Self, Self::Error> {
+        Self::try_from(path.clone())
     }
 }
 
-impl From<syn::Path> for model::Identifier{
-    fn from(path: syn::Path) -> Self {
-        let mut path = path;
+impl TryFrom<syn::Path> for model::Identifier{
+    type Error = &'static str;
+
+    fn try_from(mut path: syn::Path) -> Result<Self, Self::Error> {
         let name = path.segments.pop().unwrap()
             .value().ident.to_string();
         let path = path.segments.pairs()
-            .map(|pair| pair.value().ident.to_string())
-            .collect();
+            .map(|pair| {
+                if !pair.value().arguments.is_empty() {
+                    Err("Path contains arguments")
+                } else {
+                    Ok(pair.value().ident.to_string())
+                }
+            })
+            .collect::<Result<Vec<String>, Self::Error>>()?;
 
-        Self::new(path, name)
+        Ok(Self::new(path, name))
     }
 }
 
@@ -377,13 +378,13 @@ impl From<&model::Identifier> for syn::Path {
         };
 
         value.path.iter().for_each(|s| {
-                let ident = syn::Ident::new(s, proc_macro2::Span::call_site());
+                let ident = syn::Ident::new(s, span!());
                 let segment = syn::PathSegment::from(ident);
-                path.segments.push_value(segment)
+                path.segments.push(segment)
             }
         );
 
-        let ident = syn::Ident::new(value.name(), proc_macro2::Span::call_site());
+        let ident = syn::Ident::new(value.name(), span!());
         let segment = syn::PathSegment::from(ident);
         path.segments.push(segment);
  
@@ -392,6 +393,11 @@ impl From<&model::Identifier> for syn::Path {
     }
 }
 
+/// Using this with the following return types will panic!():
+///   - ReturnType::BoxedTrait
+///   - ReturnType::BoxedTraitIterator
+///   - ReturnType::AssociatedType
+///   - ReturnType::Type
 impl quote::ToTokens for model::ReturnType{
     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
         tokens.append_all(
@@ -408,7 +414,9 @@ impl quote::ToTokens for model::ReturnType{
                 model::ReturnType::Byte => quote::quote!{ u8 },
                 // this has to be handled conditionally
                 model::ReturnType::BoxedTrait => unreachable!("ReturnType::BoxedTrait cannot directly produce a TokenStream"),
-                model::ReturnType::BoxedTraitIterator=> unreachable!("ReturnType::BoxedTraitIterator cannot directly produce a TokenStream"),
+                model::ReturnType::BoxedTraitIterator => unreachable!("ReturnType::BoxedTraitIterator cannot directly produce a TokenStream"),
+                model::ReturnType::AssociatedType => unreachable!("ReturnType::AssociatedType cannot directly produce a TokenStream"),
+                model::ReturnType::Enum => unreachable!("ReturnType::Enum cannot directly produce a TokenStream"),
                 model::ReturnType::Type => unreachable!("ReturnType::Type cannot directly produce a TokenStream")
             }
         );
@@ -441,7 +449,7 @@ impl model::Method {
                     .to_token_stream();
 
                 quote::quote!{
-                    ::std::boxed::Box<dyn ::std::iter::Iterator<Item = dyn #ident>>
+                    ::std::boxed::Box<dyn ::std::iter::Iterator<Item = ::std::boxed::Box<dyn #ident>>>
                 }
             },
             model::ReturnType::Type => {

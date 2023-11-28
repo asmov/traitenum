@@ -23,11 +23,12 @@ pub fn traitenum_derive_macro(
  
 pub(crate) fn parse_traitenum_macro(
     item: proc_macro2::TokenStream,
-    enumtrait_model_bytes: &[u8]) -> Result<TraitEnumMacroOutput, syn::Error>
-{
+    enumtrait_model_bytes: &[u8]
+) -> Result<TraitEnumMacroOutput, syn::Error> {
     let enumtrait = model::EnumTrait::deserialize(enumtrait_model_bytes).unwrap();
-    let trait_ident = syn::Ident::new(enumtrait.identifier().name(), proc_macro2::Span::call_site());
+    let trait_ident = syn::Ident::new(enumtrait.identifier().name(), span!());
     let input: syn::DeriveInput = syn::parse2(item)?;
+
     // the actual parsing is done with this call, the rest is building a tokenstream
     let traitenum = parse_traitenum_model(&input, &enumtrait)?;
 
@@ -35,7 +36,7 @@ pub(crate) fn parse_traitenum_macro(
     // write a method for each one defined by the enum trait, which returns the value defined by each enum variant
     let method_outputs = enumtrait.methods().iter().map(|method| {
         let method_name = method.name();
-        let func: syn::Ident = syn::Ident::new(method_name, proc_macro2::Span::call_site());
+        let func: syn::Ident = syn::Ident::new(method_name, span!());
         let return_type = method.return_type_tokens();
 
         match method.attribute_definition() {
@@ -49,12 +50,11 @@ pub(crate) fn parse_traitenum_macro(
                         match dispatch { 
                             model::Dispatch::Dynamic => {
                                 let iterator_ident = syn::Ident::new(
-                                    &format!("{}BoxedIterator", rel_id.name()),
-                                    proc_macro2::Span::call_site());
+                                    &format!("{}{}", rel_id.name(), IDENT_BOXED_ITERATOR), span!());
                                 
                                 return quote::quote!{
                                     fn #func(&self) -> #return_type {
-                                        #iterator_ident::new()
+                                        ::std::boxed::Box::new(#iterator_ident::new())
                                     }
                                 }
                             },
@@ -126,7 +126,7 @@ pub(crate) fn parse_traitenum_macro(
         let associated_type = enumtrait.types().iter().find(|t| t.relation_name() == relation_name)
             .expect(&format!("No matching associated type for enum relation: {}", relation_name));
 
-        let type_ident = syn::Ident::new(associated_type.name(), proc_macro2::Span::call_site());
+        let type_ident = syn::Ident::new(associated_type.name(), span!());
         let enum_ident = if relation_enum_id.path().is_empty() {
             syn::Path::from(relation_enum_id)
         } else {
@@ -138,7 +138,8 @@ pub(crate) fn parse_traitenum_macro(
         })
     });
 
-    let relation_iterators_outputs = build_relation_iterators(&enumtrait, &traitenum)?;
+    let dynamic_relation_iterators_outputs = build_dynamic_relation_iterators(&enumtrait, &traitenum)?;
+    let static_relation_iterators_outputs = build_static_relation_iterators(&enumtrait, &traitenum)?;
 
     let input_ident = &input.ident;
 
@@ -148,7 +149,8 @@ pub(crate) fn parse_traitenum_macro(
             #(#method_outputs)*
         }
 
-        #(#relation_iterators_outputs)*
+        #(#dynamic_relation_iterators_outputs)*
+        #(#static_relation_iterators_outputs)*
     };
 
     Ok(TraitEnumMacroOutput {
@@ -198,7 +200,7 @@ fn parse_traitenum_model(input: &syn::DeriveInput, enumtrait: &model::EnumTrait)
             let content;
             syn::parenthesized!(content in meta.input);
             let relation_path: syn::Path = content.parse()?;
-            traitenum_build.relation_enum(attr_name, relation_path.into());
+            traitenum_build.relation_enum(attr_name, relation_path.try_into().unwrap());
 
             Ok(())
         })?;
@@ -269,15 +271,79 @@ fn parse_traitenum_model(input: &syn::DeriveInput, enumtrait: &model::EnumTrait)
     Ok(traitenum_build.build())
 }
 
-// Creates iterator structs and implementations for many-to-many relations
-fn build_relation_iterators(
+const IDENT_ITERATOR: &'static str = "Iterator";
+const IDENT_BOXED_ITERATOR: &'static str = "BoxedIterator";
+
+// Creates iterator structs and implementations for dynamically dispatched many-to-many relations
+fn build_dynamic_relation_iterators(
+    enumtrait: &model::EnumTrait,
+    traitenum: &model::TraitEnum) -> syn::Result<Vec<proc_macro2::TokenStream>>
+{
+    let structs = enumtrait.relation_methods().iter()
+        .filter(|(_, rel)| rel.dispatch().unwrap() == model::Dispatch::Dynamic)
+        .filter(|(_, rel)| rel.nature().unwrap() == model::RelationNature::ManyToOne)
+        .map(|(_method, _relation_def)| {
+            // The name of the iterator struct. E.g., MyEnumBoxedIterator
+            let iterator_ident = syn::Ident::new(
+                &format!("{}{}", traitenum.identifier().name(), IDENT_BOXED_ITERATOR), span!());
+                
+            let item_path: syn::Path = traitenum.identifier().try_into().unwrap();
+            let item_trait_path: syn::Path = enumtrait.identifier().try_into().unwrap();
+
+            // Build the match body for the Iterator's next(). This simply maps a traitenum variant by its ordinal.
+            let mut ordinal: usize = 0;
+            let next_ordinal_match_body = traitenum.variants().iter().map(|variant| {
+                let variant_ident = syn::Ident::new(variant.name(), span!());
+                let output = quote::quote!{
+                    #ordinal => ::std::option::Option::Some(Box::new(#item_path::#variant_ident)),
+                };
+
+                ordinal += 1;
+                output
+            });
+
+            // Build the Iterator struct, it's new function, and it's Iterator implementation for the traitenum.
+            quote::quote!{
+                struct #iterator_ident {
+                    next_ordinal: usize
+                }
+
+                impl #iterator_ident {
+                    fn new() -> Self {
+                        Self {
+                            next_ordinal: 0
+                        }
+                    }
+                }
+
+                impl ::std::iter::Iterator for #iterator_ident {
+                    type Item = ::std::boxed::Box<dyn #item_trait_path>;
+
+                    fn next(&mut self) -> std::option::Option<Self::Item> {
+                        let ordinal = self.next_ordinal;
+                        self.next_ordinal += 1;
+                        match ordinal {
+                            #(#next_ordinal_match_body)*
+                            _ => ::std::option::Option::None
+                        }
+                    }
+                }
+            }
+        })
+        .collect();
+
+    Ok(structs)
+}
+
+// Creates iterator structs and implementations for many-to-many statically dispatched relations
+fn build_static_relation_iterators(
     enumtrait: &model::EnumTrait,
     traitenum: &model::TraitEnum) -> syn::Result<Vec<proc_macro2::TokenStream>>
 {
     let structs = enumtrait.types().iter()
         .filter(|t| t.nature() == model::RelationNature::OneToMany)
         .map(|associated_type| {
-            let iterator_ident = syn::Ident::new(&format!("{}BoxedIterator", associated_type.name()), span!());
+            let iterator_ident = syn::Ident::new(&format!("{}{}", associated_type.name(), IDENT_ITERATOR), span!());
             let traitenum_ident = syn::Ident::new(traitenum.identifier().name(), span!());
 
             // Build the match body for the Iterator's next(). This simply maps a traitenum variant by its ordinal.
@@ -310,7 +376,9 @@ fn build_relation_iterators(
                     type Item = #traitenum_ident;
 
                     fn next(&mut self) -> std::option::Option<Self::Item> {
-                        match self.next_ordinal {
+                        let ordinal = self.next_ordinal;
+                        self.next_ordinal += 1;
+                        match ordinal {
                             #(#next_ordinal_match_body)*
                             _ => ::std::option::Option::None
                         }
