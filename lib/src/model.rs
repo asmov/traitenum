@@ -934,14 +934,13 @@ impl VariantBuilder {
         }
     }
 
-    //TODO
-    /*pub(crate) fn get_value(&self, attribute_name: &str) -> Option<&AttributeValue> {
+    pub(crate) fn get_value(&self, attribute_name: &str) -> Option<&AttributeValue> {
         if let Some(named_values) = &self.named_values {
             named_values.get(attribute_name)
         } else {
             None
         }
-    }*/
+    }
 
     pub(crate) fn value(&mut self, attribute_name: String, value: AttributeValue) -> &mut Self {
         if let Some(named_values) = &mut self.named_values {

@@ -15,8 +15,11 @@ pub enum ImporterEnum {
 
 #[derive(traitmacro::ParentTraitEnum)]
 pub enum ImporterParentEnum {
+    #[traitenum(children(ImporterChildAlphaEnum))]
     Alpha,
+    #[traitenum(children(ImporterChildAlphaEnum))]
     Bravo,
+    #[traitenum(children(ImporterChildAlphaEnum))]
     Charlie 
 }
 

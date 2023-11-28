@@ -39,15 +39,41 @@ pub(crate) fn parse_traitenum_macro(
         let return_type = method.return_type_tokens();
 
         match method.attribute_definition() {
-            model::AttributeDefinition::Relation(_) => {
-                let relation_path: syn::Path = traitenum.relation_enum_identifier(method_name).unwrap().into();
-                return quote::quote!{
-                    fn #func(&self) -> #return_type {
-                        #relation_path
+            model::AttributeDefinition::Relation(reldef) => {
+                let rel_id = traitenum.relation_enum_identifier(method_name).unwrap();
+                let relation_path: syn::Path = rel_id.into();
+                let dispatch = reldef.dispatch().unwrap();
+                
+                match reldef.nature.unwrap() {
+                    model::RelationNature::OneToMany => {
+                        match dispatch { 
+                            model::Dispatch::Dynamic => {
+                                let iterator_ident = syn::Ident::new(
+                                    &format!("{}BoxedIterator", rel_id.name()),
+                                    proc_macro2::Span::call_site());
+                                
+                                return quote::quote!{
+                                    fn #func(&self) -> #return_type {
+                                        #iterator_ident::new()
+                                    }
+                                }
+                            },
+                            model::Dispatch::Static => unimplemented!("Static dispatch is not currently implemented")
+                        }
+                    },
+                    model::RelationNature::ManyToOne | model::RelationNature::OneToOne => {
+                        match dispatch { 
+                            model::Dispatch::Dynamic => return quote::quote!{
+                                fn #func(&self) -> #return_type {
+                                    ::std::boxed::Box::new(#relation_path)
+                                }
+                            },
+                            model::Dispatch::Static => unimplemented!("Static dispatch is not currently implemented")
+                        }
                     }
                 }
             },
-            _ => ()
+            _ => {}
         }
 
         // create the match{} body of the method, mapping variants to their return value
@@ -214,12 +240,12 @@ fn parse_traitenum_model(input: &syn::DeriveInput, enumtrait: &model::EnumTrait)
         }
 
         // if this was a Rel attribute that needs a value, we create a relation_enum for it, as it wasn't
-        // processed at the top of the enum
-        /*for method in enumtrait.methods() {
+        // processed at the top of the enum (it's a one-to-many)
+        for method in enumtrait.methods() {
             match method.attribute_definition() {
                 model::AttributeDefinition::Relation(reldef) => {
-                    match reldef.relationship {
-                        Some(model::Relationship::OneToMany) => {
+                    match reldef.nature {
+                        Some(model::RelationNature::OneToMany) => {
                             let method_name = method.name();
                             let attr_value = variant_build.get_value(&method_name).unwrap();
                             if let model::Value::Relation(id) = attr_value.value() {
@@ -234,7 +260,7 @@ fn parse_traitenum_model(input: &syn::DeriveInput, enumtrait: &model::EnumTrait)
                 },
                 _ => ()
             } 
-        }TODONE*/
+        }
 
         traitenum_build.variant(variant_build.build());
         ordinal += 1;
@@ -251,7 +277,7 @@ fn build_relation_iterators(
     let structs = enumtrait.types().iter()
         .filter(|t| t.nature() == model::RelationNature::OneToMany)
         .map(|associated_type| {
-            let iterator_ident = syn::Ident::new(&format!("{}Iterator", associated_type.name()), span!());
+            let iterator_ident = syn::Ident::new(&format!("{}BoxedIterator", associated_type.name()), span!());
             let traitenum_ident = syn::Ident::new(traitenum.identifier().name(), span!());
 
             // Build the match body for the Iterator's next(). This simply maps a traitenum variant by its ordinal.
