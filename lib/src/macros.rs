@@ -36,7 +36,7 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_enumtrait() {
+    fn test_parse_enumtrait_primitives() {
         let attribute_src = quote::quote!{
             crate::tests::MyTrait
         };
@@ -46,32 +46,27 @@ mod tests {
                 // test Str default
                 #[enumtrait::Str(default(":)"))]
                 fn str_default(&self) -> &'static str;
+
                 // test Num default
                 #[enumtrait::Num(default(44))]
                 fn num_default(&self) -> usize;
-               // test Bool default
+
+                // test Bool default
                 #[enumtrait::Bool(default(true))]
                 fn bool_default(&self) -> bool;
+
                 // test Enum default
                 #[enumtrait::Enum(default(RPS::Rock))]
                 fn enum_default(&self) -> RPS;
+
                 // test Str variant preset
                 #[enumtrait::Str(preset(Variant))]
                 fn str_preset_variant(&self) -> &'static str;
+
                 // test Num serial preset w/start and increment 
                 #[enumtrait::Num(preset(Serial), start(3), increment(2))]
                 fn num_preset_serial_all(&self) -> u64;
-                // test Rel dynamic many-to-one
-                #[enumtrait::Rel(nature(ManyToOne), dispatch(Dynamic))]
-                fn many_to_one_dyn(&self) -> Box<dyn FirstOneTrait>;
-                 // test Rel dynamic one-to-many
-                #[enumtrait::Rel(nature(OneToMany), dispatch(Dynamic))]
-                fn one_to_many_dyn(&self) -> Box<dyn Iterator<Item = dyn FirstManyTrait>>;
-                // test elided Rel dynamic one-to-many
-                fn one_to_many_elided_dyn(&self) -> Box<dyn Iterator<Item = dyn SecondManyTrait>>;
-                // test Rel many-to-one dynamic (elided)
-                #[enumtrait::Rel(nature(ManyToOne))]
-                fn many_to_one_dynelide(&self) -> Box<dyn SecondOneTrait>;
+
                 // test default implementation
                 fn default_implementation(&self) {
                     todo!();
@@ -86,16 +81,14 @@ mod tests {
         assert_eq!("MyTrait", model.identifier().name());
 
         let item_src = quote::quote!{
-            #[traitenum(many_to_one(ManyToOneEnum::My))]
             enum MyEnum {
-                #[traitenum(one_to_many(OneToManyOneEnum))]
                 One,
                 // test short-hand enum values
-                #[traitenum(str_preset_variant("2"), enum_default(Paper), one_to_many(OneToManyTwoEnum))]
+                #[traitenum(str_preset_variant("2"), enum_default(Paper))]
                 Two,
-                #[traitenum(bool_default(false), one_to_many(OneToManyThreeEnum))]
+                #[traitenum(bool_default(false))]
                 Three,
-                #[traitenum(enum_default(RPS::Scissors), one_to_many(OneToManyFourEnum))]
+                #[traitenum(enum_default(RPS::Scissors))]
                 Four,
             }
         };
@@ -123,6 +116,60 @@ mod tests {
         // test non-default enum
         assert_traitenum_value_enum!(enum_model, "Four", "enum_default", "RPS::Scissors");
     }
+    
+    #[test]
+    fn test_parse_enumtrait_dynamic_relations() {
+        let attribute_src = quote::quote!{
+            crate::tests::MyTrait
+        };
+
+        let item_src = quote::quote!{
+            pub trait MyTrait {
+                // test Rel dynamic many-to-one
+                #[enumtrait::Rel(nature(ManyToOne), dispatch(Dynamic))]
+                fn many_to_one_dyn(&self) -> Box<dyn FirstOneTrait>;
+
+                // test Rel many-to-one dynamic (elided)
+                #[enumtrait::Rel(nature(ManyToOne))]
+                fn many_to_one_dyn_elide(&self) -> Box<dyn SecondOneTrait>;
+
+                // test Rel dynamic one-to-many
+                #[enumtrait::Rel(nature(OneToMany), dispatch(Dynamic))]
+                fn one_to_many_dyn(&self) -> Box<dyn Iterator<Item = dyn FirstManyTrait>>;
+
+                // test elided Rel dynamic one-to-many
+                fn one_to_many_elided_dyn(&self) -> Box<dyn Iterator<Item = dyn SecondManyTrait>>;
+            }
+        };
+        
+        let model = enumtrait::parse_enumtrait_macro(attribute_src, item_src).unwrap().model;
+        dbg!(&model);
+
+        assert_eq!(vec!["crate", "tests"], model.identifier().path());
+        assert_eq!("MyTrait", model.identifier().name());
+
+        let item_src = quote::quote!{
+            #[traitenum(many_to_one_dyn(ManyToOneEnum::Dyn))]
+            #[traitenum(many_to_one_dyn_elide(ManyToOneEnum::DynElide))]
+            enum MyEnum {
+                #[traitenum(one_to_many_dyn(OneToManyOneEnum), one_to_many_elided_dyn(OneToManyTwoEnum))]
+                One,
+                // test short-hand enum values
+                #[traitenum(one_to_many_dyn(OneToManyThreeEnum), one_to_many_elided_dyn(OneToManyFourEnum))]
+                Two,
+            }
+        };
+
+        let model_bytes = bincode::serialize(&model).unwrap();
+        let traitenum::TraitEnumMacroOutput {model: enum_model, tokens: enum_tokens} = traitenum::parse_traitenum_macro(
+            item_src, &model_bytes).unwrap();
+
+        dbg!(&enum_model);
+        dbg!(&enum_tokens.to_string());
+
+        // test defaults
+    }
+
 
     #[test]
     fn test_parse_enumtrait_errors() {

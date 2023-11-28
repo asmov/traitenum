@@ -424,14 +424,35 @@ impl quote::ToTokens for model::Identifier {
 impl model::Method {
     pub fn return_type_tokens(&self) -> proc_macro2::TokenStream {
         match self.return_type {
+            model::ReturnType::BoxedTrait => {
+                let ident = self.attribute_definition()
+                    .get_relation_definition()
+                    .identifier()
+                    .to_token_stream();
+
+                quote::quote!{
+                    ::std::boxed::Box<dyn #ident>
+                }
+            },
+            model::ReturnType::BoxedTraitIterator => {
+                let ident = self.attribute_definition()
+                    .get_relation_definition()
+                    .identifier()
+                    .to_token_stream();
+
+                quote::quote!{
+                    ::std::boxed::Box<dyn ::std::iter::Iterator<Item = dyn #ident>>
+                }
+            },
             model::ReturnType::Type => {
                 match self.attribute_definition() {
                     model::AttributeDefinition::FieldlessEnum(enumdef) => enumdef.identifier.to_token_stream(),
+                    // statically dispatched relations
                     model::AttributeDefinition::Relation(reldef) => reldef.identifier.to_token_stream(),
                     _ => unreachable!("Invalid attribute definition for ReturnType::Type")
                 }
             },
-            _ => self.return_type().to_token_stream()
+            _ => self.return_type.to_token_stream()
         }
     }
 }

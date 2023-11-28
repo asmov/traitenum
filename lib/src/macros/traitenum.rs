@@ -76,20 +76,26 @@ pub(crate) fn parse_traitenum_macro(
         output
     });
 
-    // define an associated type for each of the traitenum's relations
+    // define an associated type for each of the traitenum's statically dispatched relations
     // e.g., enum Foo { type OtherTraitEnum = OtherEnum; ... }
-    let type_outputs = traitenum.relation_enums().map(|(relation_name, relation_enum_id)| {
+    let type_outputs = traitenum.relation_enums().filter_map(|(relation_name, relation_enum_id)| {
         // all of the errors should have been handled during model parsing, so we panic here instead of Err 
         // fetch the attribute definition with the same name as the relation's name 
         let attribute_definition = enumtrait.methods().iter()
             .find(|m| { m.name() == relation_name })
             .expect(&format!("No matching relation definition for enum relation: {}", relation_name))
             .attribute_definition();
+
         // grab the associated relation definition for the attribute, which contains its Self::<Type> Identifier
-        match attribute_definition {
-            model::AttributeDefinition::Relation(_) => {},
+        let reldef = match attribute_definition {
+            model::AttributeDefinition::Relation(ref reldef) => reldef,
             _ => unreachable!("Mismatched AttributeDefinition variant for traitenum relation: {}", relation_name)
         };
+
+        // skip dynamic dispatch
+        if let Some(model::Dispatch::Dynamic) = reldef.dispatch() {
+            return None;
+        }
 
         let associated_type = enumtrait.types().iter().find(|t| t.relation_name() == relation_name)
             .expect(&format!("No matching associated type for enum relation: {}", relation_name));
@@ -101,9 +107,9 @@ pub(crate) fn parse_traitenum_macro(
             syn::Path::from(relation_enum_id.base().unwrap())
         };
         
-        quote::quote!{
+        Some(quote::quote!{
             type #type_ident = #enum_ident;
-        }
+        })
     });
 
     let relation_iterators_outputs = build_relation_iterators(&enumtrait, &traitenum)?;
@@ -243,7 +249,7 @@ fn build_relation_iterators(
     traitenum: &model::TraitEnum) -> syn::Result<Vec<proc_macro2::TokenStream>>
 {
     let structs = enumtrait.types().iter()
-        .filter(|t| t.relationship() == model::RelationNature::OneToMany)
+        .filter(|t| t.nature() == model::RelationNature::OneToMany)
         .map(|associated_type| {
             let iterator_ident = syn::Ident::new(&format!("{}Iterator", associated_type.name()), span!());
             let traitenum_ident = syn::Ident::new(traitenum.identifier().name(), span!());

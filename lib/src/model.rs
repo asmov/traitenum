@@ -89,14 +89,14 @@ pub struct AssociatedType {
     name: String,
     relation_name: String,
     trait_identifier: Identifier,
-    relationship: RelationNature
+    nature: RelationNature
 }
 
 impl AssociatedType {
     pub fn name(&self) -> &str { &self.name }
     pub fn relation_name(&self) -> &str { &self.relation_name }
     pub fn trait_identifier(&self) -> &Identifier { &self.trait_identifier }
-    pub fn relationship(&self) -> RelationNature { self.relationship }
+    pub fn nature(&self) -> RelationNature { self.nature }
 
     pub fn valid_return_type_id(identifier: &Identifier) -> bool {
         identifier.path.len() == 1 && identifier.path[1] == "Self"
@@ -106,13 +106,13 @@ impl AssociatedType {
         name: String,
         relation_name: String,
         trait_identifier: Identifier,
-        relationship: RelationNature) -> Self
+        nature: RelationNature) -> Self
     {
         Self {
             name,
             relation_name: relation_name,
             trait_identifier,
-            relationship
+            nature
         }
     }
 }
@@ -476,6 +476,13 @@ impl AttributeDefinition {
         }
     }
 
+    pub fn get_relation_definition(&self) -> &RelationAttributeDefinition {
+        match self {
+            Self::Relation(ref def) => def,
+            _ => unreachable!("Unexpected definition type: {}", RelationAttributeDefinition::DEFINITION_NAME)
+        }
+    }
+
     pub fn get_relation_definition_mut(&mut self) -> &mut RelationAttributeDefinition {
         match self {
             Self::Relation(ref mut def) => def,
@@ -681,6 +688,7 @@ impl RelationAttributeDefinition {
     const DEFINITION_NAME: &'static str = "Rel";
 
     pub fn identifier(&self) -> &Identifier { &self.identifier }
+    pub fn dispatch(&self) -> Option<Dispatch> { self.dispatch }
 
     pub fn new(identifier: Identifier) -> Self {
         Self {
@@ -692,31 +700,17 @@ impl RelationAttributeDefinition {
 
     pub fn validate(&self) -> Result<(), &str> {
         match self.nature {
-            /*Some(Relationship::OneToOne) => {
-                if self.one.is_none() {
-                    return Err("Missing property for One-to-One Rel definition: one")
-                } else if self.many.is_some() {
-                    return Err("Unusuable property for One-to-One Rel definition: many")
-                }
-            },
-            Some(Relationship::OneToMany) => {
-                if self.many.is_none() {
-                    return Err("Missing property for One-to-Many Rel definition: many")
-                } else if self.one.is_some() {
-                    return Err("Unusable property for One-to-One Rel definition: one")
-                }
-            },
-            Some(Relationship::ManyToOne) => {
-                if self.one.is_none() {
-                    return Err("Missing property for Many-to-One Rel definition: one")
-                } else if self.many.is_some() {
-                    return Err("Unusuable property for Many-to-One Rel definition: many")
-                }
-
-            },*/
-            Some(_) => Ok(()),
-            None => return Err("Missing property for Rel definition: relationship")
+            Some(_) => {},
+            None => return Err("Missing property for Rel definition: nature")
         }
+
+        match self.dispatch{
+            Some(Dispatch::Dynamic) => {},
+            Some(Dispatch::Static) => return  Err("Static dispatch is currently unimplemented"),
+            None => return Err("Missing property for Rel definition: nature")
+        }
+
+        Ok(())
     }
 }
 

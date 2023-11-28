@@ -119,6 +119,73 @@ fn parse_trait_fn(methods: &mut Vec<model::Method>, func: &syn::TraitItemFn) -> 
     Ok(())
 }
 
+fn parse_trait_fn_return(func: &syn::TraitItemFn) -> syn::Result<(model::ReturnType, Option<model::Identifier>)> {
+    let mut return_type: Option<model::ReturnType> = None;
+    let mut return_type_identifier: Option<model::Identifier> = None;
+
+    match &func.sig.output {
+        syn::ReturnType::Default => synerr!("Default return types () are not supported"),
+        syn::ReturnType::Type(_, ref returntype) => match **returntype {
+            syn::Type::Path(ref path_type) => {
+                if let Ok(ret_type) = model::ReturnType::try_from(&path_type.path) {
+                    // This models primitive return types that ReturnType supports. E.g., usize, f32, bool, etc.
+                    return_type = Some(ret_type);
+                } else if let Some((ret_type, ret_type_id)) = try_parse_trait_fn_return_boxed(path_type)? {
+                    // This models ReturnType::BoxedTrait. E.g.: Box<dyn MyTrait>
+                    // The trait is modeled as a model::Identifier.
+                    return_type = Some(ret_type);
+                    return_type_identifier = Some(ret_type_id);
+                } else {
+                    // Anything else is modeled as ReturnType::Type, including enums.
+                    return_type = Some(model::ReturnType::Type);
+                    return_type_identifier = match model::Identifier::try_from(&path_type.path) {
+                        Ok(id) => Some(id),
+                        Err(_) => synerr!("Unsupported return type: {}",
+                            &path_type.path.to_token_stream().to_string())
+                    }
+                }
+            },
+            // As for reference return types, we only support &'static str at the moment.
+            syn::Type::Reference(ref ref_type) => {
+                // only elided and static lifetimes are supported
+                let _has_static_lifetime = match &ref_type.lifetime {
+                    Some(lifetime) => {
+                        if "static" == lifetime.ident.to_string() {
+                            true
+                        } else {
+                            synerr!("Only elided and static lifetimes are supported for return types")
+                        }
+                    },
+                    None => false
+                };
+
+                // mutability is not supported
+                if ref_type.mutability.is_some() {
+                    synerr!("Mutable return types are not supported")
+                }
+
+                // basically just ensure that the ident is a "str"
+                if let syn::Type::Path(ref path_type) = *ref_type.elem {
+                    if let Some(ident) = path_type.path.get_ident() {
+                        if "str" == ident.to_string() {
+                            return_type = Some(model::ReturnType::StaticStr);
+                        }
+                    }
+                }
+
+                // ... the else statement for each nested if statement above
+                if return_type.is_none() {
+                    synerr!("Unsupported return reference type: {}", ref_type.to_token_stream().to_string())
+                }
+            },
+            _ => synerr!("Unimplemented trait return type"),
+        }
+    }
+
+    let return_type = return_type.expect("Unable to parse return type");
+    Ok((return_type, return_type_identifier))
+}
+
 const IDENT_BOX: &'static str = "Box";
 const IDENT_ITERATOR: &'static str = "Iterator";
 const IDENT_ITEM: &'static str = "Item";
@@ -194,73 +261,6 @@ fn try_parse_trait_fn_return_boxed_trait_iterator(
 }
 
 
-fn parse_trait_fn_return(func: &syn::TraitItemFn) -> syn::Result<(model::ReturnType, Option<model::Identifier>)> {
-    let mut return_type: Option<model::ReturnType> = None;
-    let mut return_type_identifier: Option<model::Identifier> = None;
-
-    match &func.sig.output {
-        syn::ReturnType::Default => synerr!("Default return types () are not supported"),
-        syn::ReturnType::Type(_, ref returntype) => match **returntype {
-            syn::Type::Path(ref path_type) => {
-                if let Ok(ret_type) = model::ReturnType::try_from(&path_type.path) {
-                    // This models primitive return types that ReturnType supports. E.g., usize, f32, bool, etc.
-                    return_type = Some(ret_type);
-                } else if let Some((ret_type, ret_type_id)) = try_parse_trait_fn_return_boxed(path_type)? {
-                    // This models ReturnType::BoxedTrait. E.g.: Box<dyn MyTrait>
-                    // The trait is modeled as a model::Identifier.
-                    return_type = Some(ret_type);
-                    return_type_identifier = Some(ret_type_id);
-                } else {
-                    // Anything else is modeled as ReturnType::Type, including enums.
-                    return_type = Some(model::ReturnType::Type);
-                    return_type_identifier = match model::Identifier::try_from(&path_type.path) {
-                        Ok(id) => Some(id),
-                        Err(_) => synerr!("Unsupported return type: {}",
-                            &path_type.path.to_token_stream().to_string())
-                    }
-                }
-            },
-            // As for reference return types, we only support &'static str at the moment.
-            syn::Type::Reference(ref ref_type) => {
-                // only elided and static lifetimes are supported
-                let _has_static_lifetime = match &ref_type.lifetime {
-                    Some(lifetime) => {
-                        if "static" == lifetime.ident.to_string() {
-                            true
-                        } else {
-                            synerr!("Only elided and static lifetimes are supported for return types")
-                        }
-                    },
-                    None => false
-                };
-
-                // mutability is not supported
-                if ref_type.mutability.is_some() {
-                    synerr!("Mutable return types are not supported")
-                }
-
-                // basically just ensure that the ident is a "str"
-                if let syn::Type::Path(ref path_type) = *ref_type.elem {
-                    if let Some(ident) = path_type.path.get_ident() {
-                        if "str" == ident.to_string() {
-                            return_type = Some(model::ReturnType::StaticStr);
-                        }
-                    }
-                }
-
-                // ... the else statement for each nested if statement above
-                if return_type.is_none() {
-                    synerr!("Unsupported return reference type: {}", ref_type.to_token_stream().to_string())
-                }
-            },
-            _ => synerr!("Unimplemented trait return type"),
-        }
-    }
-
-    let return_type = return_type.expect("Unable to parse return type");
-    Ok((return_type, return_type_identifier))
-}
-
 fn parse_trait_type(
     partial_types: &mut Vec<model::AssociatedTypePartial>,
     type_item: &syn::TraitItemType) -> syn::Result<()>
@@ -326,12 +326,18 @@ fn build_associated_types(
 {
     let mut types: Vec<model::AssociatedType> = Vec::new();
 
-    // match partially constructed associated types to relation methods and finalize
+    // match partially constructed associated types to statically dispatched relation methods and finalize
     for method in methods {
         let relation_def = match method.attribute_definition() {
             model::AttributeDefinition::Relation(reldef) => reldef,
             _ => continue
         };
+
+        match relation_def.dispatch() {
+            Some(model::Dispatch::Static) => {},
+            Some(model::Dispatch::Dynamic) => continue,
+            None => unreachable!("Dispatch should be set by now")
+        }
 
         let method_return_id = relation_def.identifier();
         let partial_type_result = partial_types.iter_mut()
