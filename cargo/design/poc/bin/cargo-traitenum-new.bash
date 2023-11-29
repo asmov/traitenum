@@ -32,20 +32,21 @@ ASSET_LIB_MANIFEST_TEMPLATE="${ASSETS_PATH}/lib_Cargo.toml.template"
 ASSET_DERIVE_MANIFEST_TEMPLATE="${ASSETS_PATH}/derive_Cargo.toml.template"
 
 main () {
-    echo "Creating workspace ..."
+    echo "[traitenum] Creating workspace ..."
     mk_workspace
-    echo "Creating lib ..."
+    echo "[traitenum] Creating lib ..."
     mk_lib
-    echo "Creating derive ..."
+    echo "[traitenum] Creating derive ..."
     mk_derive
-    echo "Linking lib ..."
-    link_lib
-    echo "Linking derive ..."
-    link_derive
-    echo "Building ..."
-    build
-    echo "Testing ..."
-    test_build
+    echo "[traitenum] Configuring lib ..."
+    config_lib
+    echo "[traitenum] Configuring derive ..."
+    config_derive
+    echo "[traitenum] Building ..."
+    build_workspace
+    echo "[traitenum] Testing ..."
+    test_workspace
+    echo
     echo "Your traitenum workspace is ready."
  }
 
@@ -72,17 +73,17 @@ mk_derive () {
     echo "" > ${DERIVE_RELPATH}/src/lib.rs
 }
 
-link_lib () {
+config_lib () {
     cargo -q add --manifest-path "${LIB_RELPATH}/Cargo.toml" --path "${TRAITENUM_MACRO_PATH}" 
 }
 
-link_derive () {
+config_derive () {
     cargo -q add --manifest-path "${DERIVE_RELPATH}/Cargo.toml" proc-macro2
     cargo -q add --manifest-path "${DERIVE_RELPATH}/Cargo.toml" --path "${TRAITENUM_LIB_PATH}" 
     cargo -q add --manifest-path "${DERIVE_RELPATH}/Cargo.toml" --path "${LIB_RELPATH}" 
 }
 
-build () {
+build_workspace () {
     local pwd
     pwd="$PWD"
     cd "$WORKSPACE_DIR"
@@ -90,7 +91,7 @@ build () {
     cd "$pwd"
 }
 
-test_build () {
+test_workspace () {
     local pwd
     pwd="$PWD"
     cd "$WORKSPACE_DIR"
