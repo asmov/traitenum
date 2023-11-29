@@ -4,7 +4,6 @@ macro_rules! gen_require {
         use proc_macro;
         use proc_macro2;
         use $traitlib_path as traitlib;
-        use $macrolib_path as macrolib;
     };
 }
 

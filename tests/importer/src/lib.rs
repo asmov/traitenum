@@ -1,9 +1,9 @@
-use traitenum_test_exporter_macro as traitmacro;
-use traitenum_test_exporter_traits::SimpleTrait;
-use traitenum_test_exporter_traits::ParentTrait;
-use traitenum_test_exporter_traits::ChildTrait;
+use traitenum_test_exporter_derive as exporter_derive;
+use traitenum_test_exporter::SimpleTrait;
+use traitenum_test_exporter::ParentTrait;
+use traitenum_test_exporter::ChildTrait;
 
-#[derive(traitmacro::SimpleTraitEnum)]
+#[derive(exporter_derive::SimpleTraitEnum)]
 pub enum ImporterEnum {
     #[traitenum(name("alpha"), column(0))]
     Alpha,
@@ -13,7 +13,7 @@ pub enum ImporterEnum {
     Charlie
 }
 
-#[derive(traitmacro::ParentTraitEnum)]
+#[derive(exporter_derive::ParentTraitEnum)]
 pub enum ImporterParentEnum {
     #[traitenum(children(ImporterChildAlphaEnum))]
     Alpha,
@@ -24,7 +24,7 @@ pub enum ImporterParentEnum {
 }
 
 
-#[derive(traitmacro::ChildTraitEnum)]
+#[derive(exporter_derive::ChildTraitEnum)]
 #[traitenum(parent(ImporterParentEnum::Bravo))]
 pub enum ImporterChildAlphaEnum {
     Zero,
@@ -34,7 +34,7 @@ pub enum ImporterChildAlphaEnum {
 
 #[cfg(test)]
 mod tests {
-    use traitenum_test_exporter_traits::{SimpleTrait,ChildTrait,ParentTrait};
+    use traitenum_test_exporter::{SimpleTrait,ChildTrait,ParentTrait};
 
     #[test]
     fn test_enum_attributes() {
