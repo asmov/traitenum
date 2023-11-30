@@ -13,8 +13,10 @@ shopt -s extglob
 # These values would come from the command line as arguments
 WORKSPACE_DIR="jango"
 LIB_NAME="jango"
+LIB_CRATE_NAME="jango"
 LIB_DIR="lib"
 DERIVE_NAME="jango-derive"
+DERIVE_CRATE_NAME="jango_derive"
 DERIVE_DIR="derive"
 
 SOURCE_PATH="$(realpath "$(dirname "${BASH_SOURCE[0]}")")" 
@@ -30,6 +32,9 @@ DERIVE_RELPATH="${WORKSPACE_DIR}/${DERIVE_DIR}"
 ASSET_WORKSPACE_MANIFEST_TEMPLATE="${ASSETS_PATH}/workspace_Cargo.toml.template"
 ASSET_LIB_MANIFEST_TEMPLATE="${ASSETS_PATH}/lib_Cargo.toml.template"
 ASSET_DERIVE_MANIFEST_TEMPLATE="${ASSETS_PATH}/derive_Cargo.toml.template"
+ASSET_DERIVE_LIB_TEMPLATE="${ASSETS_PATH}/derive_lib.rs.template"
+ASSET_DERIVE_INTEGRATION_TEST_MYTRAIT_TEMPLATE="${ASSETS_PATH}/derive_test_mytrait.rs.template"
+ASSET_LIB_LIB_TEMPLATE="${ASSETS_PATH}/lib_lib.rs.template"
 
 main () {
     echo "[traitenum] Creating workspace ..."
@@ -63,6 +68,7 @@ mk_lib () {
     cat "${ASSET_LIB_MANIFEST_TEMPLATE}" \
         | sed -e s"/%{LIB_NAME}%/${LIB_NAME}/g" \
         > ${LIB_RELPATH}/Cargo.toml
+    cp "${ASSET_LIB_LIB_TEMPLATE}" ${LIB_RELPATH}/src/lib.rs
 }
 
 mk_derive () {
@@ -70,7 +76,17 @@ mk_derive () {
     cat "${ASSET_DERIVE_MANIFEST_TEMPLATE}" \
         | sed -e s"/%{DERIVE_NAME}%/${DERIVE_NAME}/g" \
         > ${DERIVE_RELPATH}/Cargo.toml
-    echo "" > ${DERIVE_RELPATH}/src/lib.rs
+    echo "" > "${DERIVE_RELPATH}/src/lib.rs"
+    cat "${ASSET_DERIVE_LIB_TEMPLATE}" \
+        | sed -e s"/%{LIB_CRATE_NAME}%/${LIB_CRATE_NAME}/g" \
+        | sed -e s"/%{DERIVE_CRATE_NAME}%/${DERIVE_CRATE_NAME}/g" \
+        > ${DERIVE_RELPATH}/src/lib.rs
+    mkdir "${DERIVE_RELPATH}/tests"
+    cat "${ASSET_DERIVE_INTEGRATION_TEST_MYTRAIT_TEMPLATE}" \
+        | sed -e s"/%{LIB_CRATE_NAME}%/${LIB_CRATE_NAME}/g" \
+        | sed -e s"/%{DERIVE_CRATE_NAME}%/${DERIVE_CRATE_NAME}/g" \
+        > ${DERIVE_RELPATH}/tests/mytrait.rs
+ 
 }
 
 config_lib () {

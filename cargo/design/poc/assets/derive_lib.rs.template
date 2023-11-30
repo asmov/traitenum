@@ -1,0 +1,3 @@
+traitenum_lib::gen_require!(%{LIB_CRATE_NAME}%, %{DERIVE_CRATE_NAME}%);
+traitenum_lib::gen_derive_macro!(MyTraitEnum, derive_traitenum_mytrait, traitlib::TRAITENUM_MODEL_BYTES_MYTRAIT);
+
