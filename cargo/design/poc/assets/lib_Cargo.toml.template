@@ -1,4 +1,0 @@
-[package]
-name = "%{LIB_NAME}%"
-version = "0.1.0"
-edition = "2021"

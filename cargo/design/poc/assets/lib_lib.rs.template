@@ -1,9 +1,0 @@
-use traitenum::enumtrait;
-
-#[enumtrait(crate::MyTrait)]
-pub trait MyTrait {
-    #[enumtrait::Str()]
-    fn nickname(&self) -> &'static str;
-    #[enumtrait::Num(preset(Ordinal))]
-    fn ordinal(&self) -> usize;
-}
