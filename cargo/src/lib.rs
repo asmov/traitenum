@@ -47,12 +47,16 @@ pub mod cmd {
     }
 
     pub mod new;
+    pub mod add;
+
     pub use new::new_workspace;
+    pub use add::add_trait;
 }
 
 pub fn run(cli: cli::Cli) -> anyhow::Result<()> {
     match cli.command {
-        cli::Commands::New(args) => cmd::new_workspace(args)
+        cli::Commands::New(args) => cmd::new_workspace(args),
+        cli::Commands::Add(args) => cmd::add_trait(args),
     }
 }
 

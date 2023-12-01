@@ -35,8 +35,8 @@ pub fn new_workspace(mut args: cli::NewCommand) -> anyhow::Result<()> {
     build_workspace(&args)?;
     log("Testing workspace ...");
     test_workspace(&args)?;
-
     log_success("Your traitenum workspace is ready.");
+
     Ok(())
 }
 

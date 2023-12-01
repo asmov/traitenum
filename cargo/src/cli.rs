@@ -11,10 +11,12 @@ pub struct Cli {
 
 #[derive(clap::Subcommand)]
 pub enum Commands {
-    New(NewCommand)
+    New(NewCommand),
+    Add(AddCommand)
 }
 
 #[derive(clap::Args)]
+#[command(about = "Create a new traitenum workspace containing traits and derive macros")]
 pub struct NewCommand {
     pub workspace_name: String,
      #[arg(long)]
@@ -27,4 +29,10 @@ pub struct NewCommand {
     pub lib_dir: String,
     #[arg(long, default_value_t = str!("derive"))]
     pub derive_dir: String
+}
+
+#[derive(clap::Args)]
+#[command(about = "Add a new trait and derive macro to an existing traitenum workspace")]
+pub struct AddCommand {
+    pub trait_name: String,
 }
