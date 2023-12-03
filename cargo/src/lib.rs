@@ -1,7 +1,12 @@
+use std::path::PathBuf;
 use anyhow;
 use colored::Colorize;
 use thiserror;
 
+pub mod cli;
+pub mod cmd;
+
+#[macro_export]
 macro_rules! str { ($s:literal) => { String::from($s) }; }
 
 pub fn log(msg: &str) {
@@ -18,6 +23,12 @@ pub fn snake_name(name: &str) -> String {
 
 #[derive(Debug, thiserror::Error)]
 pub enum Errors {
+    #[error("Invalid argument for `{0}` ({1}): {2}")]
+    InvalidArgument(String, String, String),
+    #[error("A cargo manifest already exists in the intended file tree (Try `init` to add workspace members): {0}")]
+    CargoManifestExists(PathBuf),
+    #[error("A cargo manifest cannot be found in the intended file tree: {0}")]
+    NoCargoManifestExists(PathBuf),
     #[error("Unable to run command: cargo")]
     CargoRunError(),
     #[error("Command `cargo new` failed: {0}")]
@@ -28,35 +39,15 @@ pub enum Errors {
     CargoError(String),
 }
 
-pub mod cli;
-
-pub mod cmd {
-    use std::process;
-
-    fn quote_error(errmsg: String) -> String {
-        let errmsg = errmsg.replace("error: ", "");
-        if let Some(offset) = errmsg.find("\n") {
-            errmsg[0 .. offset].to_owned()
-        } else {
-            errmsg
+pub fn run(cli: cli::Cli) -> anyhow::Result<()> {
+    match cli.module {
+        cli::CommandModules::Workspace(module) => match module.command {
+            cli::WorkspaceCommands::New(args) => cmd::new_workspace(args),
+            cli::WorkspaceCommands::Init(args) => todo!(),
+            
+        },
+        cli::CommandModules::Trait(module) => match module.command {
+            cli::TraitCommands::Add(args) => cmd::add_trait(args),
         }
     }
-
-    fn quote_error_output(output: process::Output) -> String {
-        quote_error(String::from_utf8(output.stderr).unwrap())
-    }
-
-    pub mod new;
-    pub mod add;
-
-    pub use new::new_workspace;
-    pub use add::add_trait;
 }
-
-pub fn run(cli: cli::Cli) -> anyhow::Result<()> {
-    match cli.command {
-        cli::Commands::New(args) => cmd::new_workspace(args),
-        cli::Commands::Add(args) => cmd::add_trait(args),
-    }
-}
-

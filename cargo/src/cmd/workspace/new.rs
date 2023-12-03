@@ -1,8 +1,15 @@
-use std::{env, fs, process, path::{PathBuf, Path}};
+use std::{env, fs, process, path::{self, PathBuf, Path}};
 use anyhow::{self, Context};
-use crate::{cli, cmd, Errors, log, log_success, snake_name};
 
-pub fn new_workspace(mut args: cli::NewCommand) -> anyhow::Result<()> {
+use crate::{self as lib, cli, cmd, str};
+
+pub fn new_workspace(mut args: cli::WorkspaceCommand) -> anyhow::Result<()> {
+    // a common mistake is to specify a path instead of a name as the positional parameter, which we can't handle well
+    if args.workspace_name.contains(path::MAIN_SEPARATOR) {
+        anyhow::bail!(lib::Errors::InvalidArgument(
+            str!("workspace-name"), str!("Try `--workspace-path` instead"), args.workspace_name))
+    }
+
     if let Some(ref workspace_path) = args.workspace_path {
         if workspace_path.is_relative() {
             args.workspace_path = Some(PathBuf::from(env::current_dir().unwrap())
@@ -21,44 +28,72 @@ pub fn new_workspace(mut args: cli::NewCommand) -> anyhow::Result<()> {
         args.derive_name = Some(format!("{}-{}", args.workspace_name, "derive"));
     }
 
-    log("Creating workspace ...");
+    // Throw an error if `init` should be used instead of `new`.
+    let workspace_path = args.workspace_path.as_ref().unwrap();
+    if cmd::find_cargo_manifest(workspace_path).is_some() {
+        anyhow::bail!(lib::Errors::CargoManifestExists(workspace_path.to_owned()));
+    }
+
+    lib::log("Creating workspace ...");
     make_workspace(&args)?;
-    log("Creating lib package ...");
+    lib::log("Creating lib package ...");
     make_lib(&args)?;
-    log("Creating derive package ...");
+    lib::log("Creating derive package ...");
     make_derive(&args)?;
-    log("Configuring lib package ...");
+    lib::log("Configuring lib package ...");
     config_lib(&args)?;
-    log("Configuring derive package ...");
+    lib::log("Configuring derive package ...");
     config_derive(&args)?;
-    log("Building workspace ...");
+    lib::log("Building workspace ...");
     build_workspace(&args)?;
-    log("Testing workspace ...");
+    lib::log("Testing workspace ...");
     test_workspace(&args)?;
-    log_success("Your traitenum workspace is ready.");
+    lib::log_success("Your traitenum workspace is ready.");
 
     Ok(())
 }
 
+const VAR_LIB_DIR: &'static str = "%{LIB_DIR}%";
+const VAR_DERIVE_DIR: &'static str = "%{DERIVE_DIR}%";
+const VAR_WORKSPACE_NAME: &'static str = "%{WORKSPACE_NAME}%";
+const VAR_LIB_NAME: &'static str = "%{LIB_NAME}%";
+const VAR_DERIVE_NAME: &'static str = "%{DERIVE_NAME}%";
+const VAR_LIB_CRATE_NAME: &'static str = "%{LIB_CRATE_NAME}%";
+const VAR_DERIVE_CRATE_NAME: &'static str = "%{DERIVE_CRATE_NAME}%";
+
+
+// There may be multiple traitenum lib/derive pairs in a workspace, so even when we create our own workspace, we need
+// to configure it the same way that we would with "cargo traitenum init". This allows our cargo addon-on to find
+// what it's looking for without guessing.
+// 
+// metadata.traitenum.workspaces: Lists each traitenum workspace by <workspace_name>. Typically the <lib_name>.
+// metadata.traitenum.<workspace_name>: Stores the workspace members for a pair of traitenum lib and derive packages.
 const WORKSPACE_MANIFEST_TEMPLATE: &'static str =
 r#"[workspace]
 resolver = "2"
 members = [ "%{LIB_DIR}%", "%{DERIVE_DIR}%" ]
+
+[workspace.metadata.traitenum]
+workspaces = [ "%{WORKSPACE_NAME}%" ]
+
+[workspace.metadata.traitenum.%{WORKSPACE_NAME}%]
+lib_member = "%{LIB_DIR}%"
+derive_member = "%{DERIVE_DIR}%"
 "#;
 
-fn make_workspace(args: &cli::NewCommand) -> anyhow::Result<()> {
+fn make_workspace(args: &cli::WorkspaceCommand) -> anyhow::Result<()> {
     let workspace_path = args.workspace_path.as_ref().unwrap();
 
     let cmdout = cargo_new(workspace_path, None)?;
     if !cmdout.status.success() {
-        anyhow::bail!(Errors::CargoNewError(cmd::quote_error_output(cmdout)))
+        anyhow::bail!(lib::Errors::CargoNewError(cmd::quote_error_output(cmdout)))
     }
 
     fs::remove_dir_all(workspace_path.join("src"))?;
 
     let workspace_manifest = WORKSPACE_MANIFEST_TEMPLATE
-        .replace("%{LIB_DIR}%", &args.lib_dir)
-        .replace("%{DERIVE_DIR}%", &args.derive_dir);
+        .replace(VAR_LIB_DIR, &args.lib_dir)
+        .replace(VAR_DERIVE_DIR, &args.derive_dir);
 
     fs::write(workspace_path.join("Cargo.toml"), workspace_manifest)?;
 
@@ -70,6 +105,9 @@ r#"[package]
 name = "%{LIB_NAME}%"
 version = "0.1.0"
 edition = "2021"
+
+[package.metadata.traitenum]
+purpose = "lib"
 "#;
 
 const LIB_SRC_TEMPLATE: &'static str =
@@ -84,17 +122,17 @@ pub trait MyTrait {
 }
 "#;
 
-fn make_lib(args: &cli::NewCommand) -> anyhow::Result<()> {
+fn make_lib(args: &cli::WorkspaceCommand) -> anyhow::Result<()> {
     let lib_path = args.workspace_path.as_ref().unwrap().join(&args.lib_dir);
     let lib_name = args.lib_name.as_ref().unwrap();
 
     let cmdout = cargo_new(&lib_path, Some(lib_name))?;
     if !cmdout.status.success() {
-        anyhow::bail!(Errors::CargoNewError(cmd::quote_error_output(cmdout)))
+        anyhow::bail!(lib::Errors::CargoNewError(cmd::quote_error_output(cmdout)))
     }
 
     let lib_manifest = LIB_MANIFEST_TEMPLATE
-        .replace("%{LIB_NAME}%", lib_name);
+        .replace(VAR_LIB_NAME, lib_name);
 
     fs::write(lib_path.join("Cargo.toml"), lib_manifest)?;
     fs::write(lib_path.join("src").join("lib.rs"), LIB_SRC_TEMPLATE)?;
@@ -110,6 +148,9 @@ edition = "2021"
 
 [lib]
 proc-macro = true
+
+[package.metadata.traitenum]
+purpose = "derive"
 "#;
 
 const DERIVE_SRC_TEMPLATE: &'static str =
@@ -148,30 +189,30 @@ mod tests {
 }
 "#;
 
-fn make_derive(args: &cli::NewCommand) -> anyhow::Result<()> {
+fn make_derive(args: &cli::WorkspaceCommand) -> anyhow::Result<()> {
     let derive_path = args.workspace_path.as_ref().unwrap().join(&args.derive_dir);
     let derive_name = args.derive_name.as_ref().unwrap();
     let lib_name = args.lib_name.as_ref().unwrap();
 
     let cmdout = cargo_new(&derive_path, Some(derive_name))?;
     if !cmdout.status.success() {
-        anyhow::bail!(Errors::CargoNewError(cmd::quote_error_output(cmdout)))
+        anyhow::bail!(lib::Errors::CargoNewError(cmd::quote_error_output(cmdout)))
     }
 
     let derive_manifest = DERIVE_MANIFEST_TEMPLATE
-        .replace("%{DERIVE_NAME}%", derive_name);
+        .replace(VAR_DERIVE_NAME, derive_name);
 
     fs::write(derive_path.join("Cargo.toml"), derive_manifest)?;
 
     let derive_src = DERIVE_SRC_TEMPLATE
-        .replace("%{LIB_CRATE_NAME}%", &snake_name(lib_name))
-        .replace("%{DERIVE_CRATE_NAME}%", &snake_name(derive_name));
+        .replace(VAR_LIB_CRATE_NAME, &lib::snake_name(lib_name))
+        .replace(VAR_DERIVE_CRATE_NAME, &lib::snake_name(derive_name));
 
     fs::write(derive_path.join("src").join("lib.rs"), derive_src)?;
 
     let derive_sample_test = DERIVE_SAMPLE_TEST_TEMPLATE
-        .replace("%{LIB_CRATE_NAME}%", &snake_name(lib_name))
-        .replace("%{DERIVE_CRATE_NAME}%", &snake_name(derive_name));
+        .replace(VAR_LIB_CRATE_NAME, &lib::snake_name(lib_name))
+        .replace(VAR_DERIVE_CRATE_NAME, &lib::snake_name(derive_name));
 
     fs::create_dir_all(derive_path.join("tests"))?;
     fs::write(derive_path.join("tests").join("mytrait.rs"), derive_sample_test)?;
@@ -179,7 +220,7 @@ fn make_derive(args: &cli::NewCommand) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn config_lib(args: &cli::NewCommand) -> anyhow::Result<()> {
+fn config_lib(args: &cli::WorkspaceCommand) -> anyhow::Result<()> {
     let lib_path = args.workspace_path.as_ref().unwrap().join(&args.lib_dir);
 
     //todo
@@ -192,7 +233,7 @@ fn config_lib(args: &cli::NewCommand) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn config_derive(args: &cli::NewCommand) -> anyhow::Result<()> {
+fn config_derive(args: &cli::WorkspaceCommand) -> anyhow::Result<()> {
     let derive_path = args.workspace_path.as_ref().unwrap().join(&args.derive_dir);
     let lib_name = args.lib_name.as_ref().unwrap();
 
@@ -208,33 +249,33 @@ fn config_derive(args: &cli::NewCommand) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn build_workspace(args: &cli::NewCommand) -> anyhow::Result<()> {
+fn build_workspace(args: &cli::WorkspaceCommand) -> anyhow::Result<()> {
     let workspace_path = args.workspace_path.as_ref().unwrap();
 
     env::set_current_dir(workspace_path)?;
     let output = process::Command::new("cargo")
         .arg("build")
         .output()
-        .context(Errors::CargoRunError())?;
+        .context(lib::Errors::CargoRunError())?;
 
     if !output.status.success() {
-        anyhow::bail!(Errors::CargoError(str!("build")))
+        anyhow::bail!(lib::Errors::CargoError(str!("build")))
     }
 
     Ok(())
 }
 
-fn test_workspace(args: &cli::NewCommand) -> anyhow::Result<()> {
+fn test_workspace(args: &cli::WorkspaceCommand) -> anyhow::Result<()> {
     let workspace_path = args.workspace_path.as_ref().unwrap();
 
     env::set_current_dir(workspace_path)?;
     let output = process::Command::new("cargo")
         .arg("test")
         .output()
-        .context(Errors::CargoRunError())?;
+        .context(lib::Errors::CargoRunError())?;
 
     if !output.status.success() {
-        anyhow::bail!(Errors::CargoError(str!("test")))
+        anyhow::bail!(lib::Errors::CargoError(str!("test")))
     }
 
     Ok(())
@@ -242,19 +283,19 @@ fn test_workspace(args: &cli::NewCommand) -> anyhow::Result<()> {
 
 fn cargo_new(path: &Path, name: Option<&str>) -> anyhow::Result<process::Output> {
     let mut cmd = process::Command::new("cargo");
-    cmd.args([ "-q", "new", "--lib" ]);
+    cmd.args(["-q", "new", "--lib"]);
 
     if let Some(name) = name {
-        cmd.args([ "--name", &name ]);
+        cmd.args(["--name", &name]);
     }
     
     let output = cmd
         .arg(path.to_str().unwrap())
         .output()
-        .context(Errors::CargoRunError())?;
+        .context(lib::Errors::CargoRunError())?;
 
     if !output.status.success() {
-        anyhow::bail!(Errors::CargoNewError(cmd::quote_error_output(output)))
+        anyhow::bail!(lib::Errors::CargoNewError(cmd::quote_error_output(output)))
     }
 
     Ok(output)
@@ -275,17 +316,17 @@ fn cargo_add(manifest_dir: &PathBuf, name: Option<&str>, path: Option<&Path>) ->
         cmd.arg(&name);
     } else if let Some(path) = path {
         target = path.to_str().unwrap();
-        cmd.args([ "--path", &target ]);
+        cmd.args(["--path", &target]);
     } else {
         unreachable!("Neither name nor path was passed as a parameter");
     }
     
     let output = cmd
         .output()
-        .context(Errors::CargoRunError())?;
+        .context(lib::Errors::CargoRunError())?;
 
     if !output.status.success() {
-        anyhow::bail!(Errors::CargoAddError(target.to_string(), cmd::quote_error_output(output)))
+        anyhow::bail!(lib::Errors::CargoAddError(target.to_string(), cmd::quote_error_output(output)))
     }
 
     Ok(output)

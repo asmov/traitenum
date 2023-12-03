@@ -1,23 +1,50 @@
 use clap;
 use std::path::PathBuf;
 
+use crate::str;
 
 #[derive(clap::Parser)]
 #[command(author, version, about, long_about = None)]
 pub struct Cli {
     #[command(subcommand)]
-    pub command: Commands
+    pub module: CommandModules
 }
 
 #[derive(clap::Subcommand)]
-pub enum Commands {
-    New(NewCommand),
-    Add(AddCommand)
+pub enum CommandModules {
+    Workspace(WorkspaceCommandModule),
+    Trait(TraitCommandModule)
 }
 
 #[derive(clap::Args)]
-#[command(about = "Create a new traitenum workspace containing traits and derive macros")]
-pub struct NewCommand {
+#[command(about = "Manage traitenum workspaces")]
+pub struct WorkspaceCommandModule {
+    #[command(subcommand)]
+    pub command: WorkspaceCommands
+}
+
+#[derive(clap::Args)]
+#[command(about = "Manage traitenum traits")]
+pub struct TraitCommandModule {
+    #[command(subcommand)]
+    pub command: TraitCommands 
+}
+
+#[derive(clap::Subcommand)]
+pub enum WorkspaceCommands {
+    #[command(about = "Create a new traitenum workspace containing traits and derive macros")]
+    New(WorkspaceCommand),
+    #[command(about = "Create new traitenum lib and derive packages in an existing workspace")]
+    Init(WorkspaceCommand),
+}
+
+#[derive(clap::Subcommand)]
+pub enum TraitCommands {
+    Add(AddTraitCommand),
+}
+
+#[derive(clap::Args)]
+pub struct WorkspaceCommand {
     pub workspace_name: String,
      #[arg(long)]
     pub workspace_path: Option<PathBuf>,
@@ -33,6 +60,10 @@ pub struct NewCommand {
 
 #[derive(clap::Args)]
 #[command(about = "Add a new trait and derive macro to an existing traitenum workspace")]
-pub struct AddCommand {
+pub struct AddTraitCommand {
     pub trait_name: String,
+    #[arg(long)]
+    pub lib_path: Option<PathBuf>,
+    #[arg(long)]
+    pub derive_path: Option<PathBuf>,
 }
