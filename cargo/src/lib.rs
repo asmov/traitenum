@@ -3,6 +3,7 @@ use anyhow;
 use colored::Colorize;
 use thiserror;
 
+pub mod meta;
 pub mod cli;
 pub mod cmd;
 
@@ -25,11 +26,17 @@ pub fn snake_name(name: &str) -> String {
 pub enum Errors {
     #[error("Invalid argument for `{0}` ({1}): {2}")]
     InvalidArgument(String, String, String),
-    #[error("A cargo manifest already exists in the intended file tree (Try `init` to add workspace members): {0}")]
+    #[error("A cargo manifest already exists for path (Try `init` to add workspace members): {0}")]
     CargoManifestExists(PathBuf),
-    #[error("A cargo manifest cannot be found in the intended file tree: {0}")]
+    #[error("A cargo manifest cannot be found for path: {0}")]
     NoCargoManifestExists(PathBuf),
-    #[error("Unable to run command: cargo")]
+    #[error("Invalid metadata for `{0}` in cargo manifest: {0}")]
+    InvalidCargoMetadata(String, PathBuf),
+    #[error("Missing metadata for `{0}` in cargo manifest: {0}")]
+    MissingCargoMetadata(String, PathBuf),
+    #[error("A cargo workspace cannot be found for path: {0}")]
+    NoCargoWorkspaceExists(PathBuf),
+     #[error("Unable to run command: cargo")]
     CargoRunError(),
     #[error("Command `cargo new` failed: {0}")]
     CargoNewError(String),

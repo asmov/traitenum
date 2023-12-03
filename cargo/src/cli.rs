@@ -63,7 +63,7 @@ pub struct WorkspaceCommand {
 pub struct AddTraitCommand {
     pub trait_name: String,
     #[arg(long)]
-    pub lib_path: Option<PathBuf>,
+    pub workspace_path: Option<PathBuf>,
     #[arg(long)]
-    pub derive_path: Option<PathBuf>,
+    pub library_name: Option<String>,
 }

@@ -1,22 +1,16 @@
-use std::{path, env, path::{PathBuf}};
-use crate::{self as lib, cmd, cli};
+use std::{env, path::{PathBuf, Path}};
+use anyhow::Context;
+use crate::{self as lib, cmd::{self, find_cargo_manifest_file}, cli, meta, str};
 
-pub fn add_trait(mut args: cli::AddTraitCommand) -> anyhow::Result<()> {
-    // if either path is missing, we have to determine it using generated manifest metadata
-    if args.lib_path.is_none() || args.derive_path.is_none() {
-        if let Some(lib_path) = args.lib_path {
+pub fn add_trait(args: cli::AddTraitCommand) -> anyhow::Result<()> {
+    let dir = if let Some(workspace_path) = args.workspace_path {
+        workspace_path
+    } else {
+        env::current_dir()?
+    };
 
-        } else if let Some(derive_path) = args.derive_path {
-
-        }
-
-        /*let cargo_manifest_filepath = match cmd::find_cargo_manifest(&PathBuf::from(env::current_dir()?)) {
-            Some(filepath) => filepath,
-            None => anyhow::bail!(lib::Errors::NoCargoManifestExists(()))
-        }*/
-        
-    } 
-
+    let workspace = cmd::build_meta(&dir)?;
+    
     Ok(())
 }
 

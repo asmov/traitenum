@@ -30,7 +30,7 @@ pub fn new_workspace(mut args: cli::WorkspaceCommand) -> anyhow::Result<()> {
 
     // Throw an error if `init` should be used instead of `new`.
     let workspace_path = args.workspace_path.as_ref().unwrap();
-    if cmd::find_cargo_manifest(workspace_path).is_some() {
+    if cmd::find_cargo_manifest_file(workspace_path).is_ok() {
         anyhow::bail!(lib::Errors::CargoManifestExists(workspace_path.to_owned()));
     }
 
@@ -73,12 +73,10 @@ r#"[workspace]
 resolver = "2"
 members = [ "%{LIB_DIR}%", "%{DERIVE_DIR}%" ]
 
-[workspace.metadata.traitenum]
-workspaces = [ "%{WORKSPACE_NAME}%" ]
-
-[workspace.metadata.traitenum.%{WORKSPACE_NAME}%]
-lib_member = "%{LIB_DIR}%"
-derive_member = "%{DERIVE_DIR}%"
+[[workspace.metadata.traitenum.library]]
+name = "%{LIBRARY_NAME}%"
+lib_dir = "%{LIB_DIR}%"
+derive_dir = "%{DERIVE_DIR}%"
 "#;
 
 fn make_workspace(args: &cli::WorkspaceCommand) -> anyhow::Result<()> {
