@@ -9,7 +9,7 @@ pub fn add_trait(args: cli::AddTraitCommand) -> anyhow::Result<()> {
         env::current_dir()?
     };
 
-    let workspace = cmd::build_meta(&dir)?;
+    let workspace = meta::build(&dir)?;
     
     Ok(())
 }

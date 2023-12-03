@@ -55,7 +55,7 @@ pub fn new_workspace(mut args: cli::WorkspaceCommand) -> anyhow::Result<()> {
 
 const VAR_LIB_DIR: &'static str = "%{LIB_DIR}%";
 const VAR_DERIVE_DIR: &'static str = "%{DERIVE_DIR}%";
-const VAR_WORKSPACE_NAME: &'static str = "%{WORKSPACE_NAME}%";
+const VAR_LIBRARY_NAME: &'static str = "%{LIBRARY_NAME}%";
 const VAR_LIB_NAME: &'static str = "%{LIB_NAME}%";
 const VAR_DERIVE_NAME: &'static str = "%{DERIVE_NAME}%";
 const VAR_LIB_CRATE_NAME: &'static str = "%{LIB_CRATE_NAME}%";
@@ -106,6 +106,9 @@ edition = "2021"
 
 [package.metadata.traitenum]
 purpose = "lib"
+
+[[package.metadata.traitenum.trait]]
+crate-path = "crate::MyTrait"
 "#;
 
 const LIB_SRC_TEMPLATE: &'static str =

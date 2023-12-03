@@ -13,6 +13,8 @@
 //! Package names and directory paths are customizable.
 //! 
 use std::path::{PathBuf, Path};
+use anyhow::Context;
+use crate::{self as lib, cmd, str};
 
 pub struct WorkspaceMeta {
     path: PathBuf,
@@ -25,10 +27,10 @@ pub struct LibraryMeta {
     derive_name: String,
     lib_dir: String,
     derive_dir: String,
+    traits: Vec<TraitMeta>
 }
 
 pub struct TraitMeta {
-    name: String,
     crate_path: String,
 }
 
@@ -54,12 +56,12 @@ impl LibraryMeta {
 }
 
 impl TraitMeta {
-    pub fn name(&self) -> &str { &self.name }
+    pub fn name(&self) -> &str { &self.crate_path.split("::").last().unwrap() }
     pub fn crate_path(&self) -> &str { &self.crate_path }
 }
 
-pub mod build {
-    use std::{path::{PathBuf, Path}, slice };
+mod build {
+    use std::path::{PathBuf, Path};
 
     pub struct WorkspaceMeta {
         path: Option<PathBuf>,
@@ -104,6 +106,7 @@ pub mod build {
         derive_name: Option<String>,
         lib_dir: Option<String>,
         derive_dir: Option<String>,
+        traits: Vec<TraitMeta>
     }
 
     impl LibraryMeta {
@@ -114,6 +117,7 @@ pub mod build {
                 derive_name: None,
                 lib_dir: None,
                 derive_dir: None,
+                traits: Vec::new()
             }
         }
 
@@ -122,6 +126,7 @@ pub mod build {
         pub fn derive_name(&mut self, derive_name: String) -> &mut Self { self.derive_name = Some(derive_name); self }
         pub fn lib_dir(&mut self, lib_dir: String) -> &mut Self { self.lib_dir = Some(lib_dir); self }
         pub fn derive_dir(&mut self, derive_dir: String) -> &mut Self { self.derive_dir = Some(derive_dir); self }
+        pub fn traits(&mut self, mut traits: Vec<TraitMeta>) -> &mut Self { self.traits.append(&mut traits); self }
 
         pub fn build(self) -> super::LibraryMeta {
             super::LibraryMeta {
@@ -129,25 +134,133 @@ pub mod build {
                 lib_name: self.lib_name.unwrap(),
                 derive_name: self.derive_name.unwrap(),
                 lib_dir: self.lib_dir.unwrap(),
-                derive_dir:self.derive_dir.unwrap(),
+                derive_dir: self.derive_dir.unwrap(),
+                traits: self.traits.into_iter().map(|t| t.build()).collect()
             }
         }
     }
 
     pub struct TraitMeta {
-        name: Option<String>,
         crate_path: Option<String>
     }
 
     impl TraitMeta {
-        pub fn name(&mut self, name: String) -> &mut Self { self.name = Some(name); self }
+        pub fn new() -> Self {
+            Self {
+                crate_path: None
+            }
+        }
+
         pub fn crate_path(&mut self, crate_path: String) -> &mut Self { self.crate_path = Some(crate_path); self }
 
         pub fn build(self) -> super::TraitMeta {
             super::TraitMeta {
-                name: self.name.unwrap(),
                 crate_path: self.crate_path.unwrap()
             }
         }
     }
 }
+
+pub fn build(from_dir: &Path) -> anyhow::Result<WorkspaceMeta> {
+    let (workspace_manifest, workspace_path) = cmd::find_cargo_workspace_manifest(&from_dir)?;
+
+    let mut workspace = build::WorkspaceMeta::new();
+    workspace.path(workspace_path);
+
+    let libraries_metadata = workspace_manifest.get("workspace.metadata.traitenum.library")
+        .with_context(|| lib::Errors::MissingCargoMetadata(
+            str!("workspace.metadata.traitenum.library"), workspace.get_path().to_owned()))?
+        .as_array()
+        .with_context(|| lib::Errors::InvalidCargoMetadata(
+            str!("workspace.metadata.traitenum.library"), workspace.get_path().to_owned()))?;
+
+    let mut libraries: Vec<build::LibraryMeta> = Vec::new();
+    let mut i = 0;
+    for library_metadata in libraries_metadata {
+        let library_metadata = library_metadata.as_table()
+            .with_context(|| lib::Errors::InvalidCargoMetadata(
+                format!("workspace.metadata.traitenum.library[{}]", i), workspace.get_path().to_owned()))?;
+        
+        let name = library_metadata.get("name")
+            .with_context(|| lib::Errors::MissingCargoMetadata(
+                format!("workspace.metadata.traitenum.library[{}].name", i), workspace.get_path().to_owned()))?
+            .as_str()
+            .with_context(|| lib::Errors::InvalidCargoMetadata(
+                format!("workspace.metadata.traitenum.library[{}].name", i), workspace.get_path().to_owned()))?;
+    
+        let lib_dir = library_metadata.get("lib_dir")
+            .with_context(|| lib::Errors::MissingCargoMetadata(
+                format!("workspace.metadata.traitenum.library[{}].lib_dir", name), workspace.get_path().to_owned()))?
+            .as_str()
+            .with_context(|| lib::Errors::InvalidCargoMetadata(
+                format!("workspace.metadata.traitenum.library[{}].lib_dir", name), workspace.get_path().to_owned()))?;
+
+        let derive_dir = library_metadata.get("derive_dir")
+            .with_context(|| lib::Errors::MissingCargoMetadata(
+                format!("workspace.metadata.traitenum.library[{}].derive_dir", name), workspace.get_path().to_owned()))?
+            .as_str()
+            .with_context(|| lib::Errors::InvalidCargoMetadata(
+                format!("workspace.metadata.traitenum.library[{}].derive_dir", name), workspace.get_path().to_owned()))?;
+
+        let mut library = build::LibraryMeta::new();
+        library.name(name.to_owned());
+        library.lib_dir(lib_dir.to_owned());
+        library.derive_dir(derive_dir.to_owned());
+        libraries.push(library);
+        i += 1;
+    }
+
+    for library in &mut libraries {
+        let lib_path = workspace.get_lib_path(&library);
+        let derive_path = workspace.get_derive_path(&library);
+
+        let manifest = cmd::read_manifest(&lib_path.join("Cargo.toml"))?;
+        let lib_name = manifest.get("package.name")
+            .with_context(|| lib::Errors::MissingCargoMetadata(str!("package.name"), lib_path.to_owned()))?
+            .as_str()
+            .with_context(|| lib::Errors::InvalidCargoMetadata(str!("package.name"), lib_path.to_owned()))?
+            .to_owned();
+
+        let traits_metadata = manifest.get("package.metadata.traitenum.trait")
+            .with_context(|| lib::Errors::MissingCargoMetadata(str!("package.metadata.traitenum.trait"), lib_path.to_owned()))?
+            .as_array()
+            .with_context(|| lib::Errors::InvalidCargoMetadata(str!("package.metadata.traitenum.trait"), lib_path.to_owned()))?;
+
+        let mut traits: Vec<build::TraitMeta> = Vec::new();
+        let mut i = 0;
+        for trait_metadata in traits_metadata {
+            let trait_metadata = trait_metadata.as_table()
+                .with_context(|| lib::Errors::InvalidCargoMetadata(
+                    format!("package.metadata.traitenum.trait[{}]", i), lib_path.to_owned()))?;
+
+            let crate_path = trait_metadata.get("crate-path")
+                .with_context(|| lib::Errors::MissingCargoMetadata(
+                    format!("package.metadata.traitenum.trait[{}]", i), lib_path.to_owned()))?
+                .as_str()
+                .with_context(|| lib::Errors::InvalidCargoMetadata(
+                    format!("package.metadata.traitenum.trait[{}]", i), lib_path.to_owned()))?
+                .to_owned();
+
+            let mut trait_meta = build::TraitMeta::new();
+            trait_meta.crate_path(crate_path);
+            traits.push(trait_meta);
+            i += 0;
+        }
+
+        let manifest = cmd::read_manifest(&derive_path.join("Cargo.toml"))?;
+        let derive_name = manifest.get("package.name")
+            .with_context(|| lib::Errors::MissingCargoMetadata(str!("package.name"), lib_path.to_owned()))?
+            .as_str()
+            .with_context(|| lib::Errors::InvalidCargoMetadata(str!("package.name"), lib_path.to_owned()))?
+            .to_owned();
+
+        library.lib_name(lib_name);
+        library.derive_name(derive_name);
+        library.traits(traits);
+    }
+
+    workspace.libraries(libraries);
+
+    Ok(workspace.build())
+}
+
