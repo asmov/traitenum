@@ -15,4 +15,4 @@ quote = "1.0.33"
 rustfmt = "0.10.0"
 syn = { version = "2.0.39", features = ["full"] }
 thiserror = "1.0.50"
-toml = "0.8.8"
+toml = { version = "0.8.8", features = ["display"] }

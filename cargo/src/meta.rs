@@ -231,7 +231,7 @@ pub fn build(from_dir: &Path) -> anyhow::Result<WorkspaceMeta> {
     Ok(workspace.build())
 }
 
-fn toml_path<'toml>(
+pub(crate) fn toml_path<'toml>(
     path: &str,
     toml: &'toml toml::Value,
     cargo_manifest_filepath: &Path
@@ -245,7 +245,21 @@ fn toml_path<'toml>(
     Ok(value)
 }
 
-fn toml_array<'toml>(
+pub(crate) fn toml_path_mut<'toml>(
+    path: &str,
+    toml: &'toml mut toml::Value,
+    cargo_manifest_filepath: &Path
+) -> anyhow::Result<&'toml mut toml::Value> {
+    let mut value = toml;
+    for key in path.split(".") {
+        value = value.get_mut(key)
+            .with_context(|| lib::Errors::MissingCargoMetadata(path.to_owned(), cargo_manifest_filepath.to_owned()))?;
+    }
+
+    Ok(value)
+}
+
+pub(crate) fn toml_array<'toml>(
     path: &str,
     toml: &'toml toml::Value,
     context: &str,
@@ -259,7 +273,21 @@ fn toml_array<'toml>(
     Ok(array)
 }
 
-fn toml_str<'toml>(
+pub(crate) fn toml_array_mut<'toml>(
+    path: &str,
+    toml: &'toml mut toml::Value,
+    context: &str,
+    cargo_manifest_filepath: &Path
+) -> anyhow::Result<&'toml mut toml::value::Array> {
+    let array = toml_path_mut(path, toml, cargo_manifest_filepath)?
+        .as_array_mut()
+        .with_context(|| lib::Errors::InvalidCargoMetadata(
+            format!("{}.{}", context, path), cargo_manifest_filepath.to_owned()))?;
+
+    Ok(array)
+}
+
+pub(crate) fn toml_str<'toml>(
     path: &str,
     toml: &'toml toml::Value,
     context: &str,

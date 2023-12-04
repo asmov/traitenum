@@ -40,8 +40,10 @@ pub enum Errors {
     MissingCargoMetadata(String, PathBuf),
     #[error("A cargo workspace cannot be found for path: {0}")]
     NoCargoWorkspaceExists(PathBuf),
-     #[error("Unable to run command: cargo")]
+    #[error("Unable to run command: cargo")]
     CargoRunError(),
+    #[error("Unable to run command: rustfmt")]
+    RustfmtRunError(),
     #[error("Command `cargo new` failed: {0}")]
     CargoNewError(String),
     #[error("Command `cargo add` failed for `{0}`: {1}")]

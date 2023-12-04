@@ -1,4 +1,4 @@
-use std::{process, path::{PathBuf, Path}};
+use std::{env, process, path::{PathBuf, Path}};
 use anyhow::Context;
 use crate::{self as lib, str};
 
@@ -58,3 +58,18 @@ pub(crate) fn find_cargo_workspace_manifest(from_dir: &Path) -> anyhow::Result<(
 
     Err(lib::Errors::NoCargoWorkspaceExists(from_dir.into()).into())
 }
+
+fn cargo_test(dir: &Path) -> anyhow::Result<()> {
+    env::set_current_dir(dir)?;
+    let output = process::Command::new("cargo")
+        .arg("test")
+        .output()
+        .context(lib::Errors::CargoRunError())?;
+
+    if !output.status.success() {
+        anyhow::bail!(lib::Errors::CargoError(str!("test")))
+    }
+
+    Ok(())
+}
+

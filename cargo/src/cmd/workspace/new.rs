@@ -270,18 +270,7 @@ fn build_workspace(args: &cli::WorkspaceCommand) -> anyhow::Result<()> {
 
 fn test_workspace(args: &cli::WorkspaceCommand) -> anyhow::Result<()> {
     let workspace_path = args.workspace_path.as_ref().unwrap();
-
-    env::set_current_dir(workspace_path)?;
-    let output = process::Command::new("cargo")
-        .arg("test")
-        .output()
-        .context(lib::Errors::CargoRunError())?;
-
-    if !output.status.success() {
-        anyhow::bail!(lib::Errors::CargoError(str!("test")))
-    }
-
-    Ok(())
+    cmd::cargo_test(workspace_path)
 }
 
 fn cargo_new(path: &Path, name: Option<&str>) -> anyhow::Result<process::Output> {
