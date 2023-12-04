@@ -1,5 +1,6 @@
 use std::{env, fs, process, path::{self, PathBuf, Path}};
 use anyhow::{self, Context};
+use convert_case::{self as case, Casing};
 
 use crate::{self as lib, cli, cmd, str};
 
@@ -90,6 +91,7 @@ fn make_workspace(args: &cli::WorkspaceCommand) -> anyhow::Result<()> {
     fs::remove_dir_all(workspace_path.join("src"))?;
 
     let workspace_manifest = WORKSPACE_MANIFEST_TEMPLATE
+        .replace(VAR_LIBRARY_NAME, args.lib_name.as_ref().unwrap())
         .replace(VAR_LIB_DIR, &args.lib_dir)
         .replace(VAR_DERIVE_DIR, &args.derive_dir);
 
@@ -206,14 +208,14 @@ fn make_derive(args: &cli::WorkspaceCommand) -> anyhow::Result<()> {
     fs::write(derive_path.join("Cargo.toml"), derive_manifest)?;
 
     let derive_src = DERIVE_SRC_TEMPLATE
-        .replace(VAR_LIB_CRATE_NAME, &lib::snake_name(lib_name))
-        .replace(VAR_DERIVE_CRATE_NAME, &lib::snake_name(derive_name));
+        .replace(VAR_LIB_CRATE_NAME, &lib_name.to_case(case::Case::Snake))
+        .replace(VAR_DERIVE_CRATE_NAME, &derive_name.to_case(case::Case::Snake));
 
     fs::write(derive_path.join("src").join("lib.rs"), derive_src)?;
 
     let derive_sample_test = DERIVE_SAMPLE_TEST_TEMPLATE
-        .replace(VAR_LIB_CRATE_NAME, &lib::snake_name(lib_name))
-        .replace(VAR_DERIVE_CRATE_NAME, &lib::snake_name(derive_name));
+        .replace(VAR_LIB_CRATE_NAME, &lib_name.to_case(case::Case::Snake))
+        .replace(VAR_DERIVE_CRATE_NAME, &derive_name.to_case(case::Case::Snake));
 
     fs::create_dir_all(derive_path.join("tests"))?;
     fs::write(derive_path.join("tests").join("mytrait.rs"), derive_sample_test)?;

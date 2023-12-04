@@ -18,10 +18,6 @@ pub fn log_success(msg: &str) {
     println!("{}{}", "[traitenum] ".green(), msg);
 }
 
-pub fn snake_name(name: &str) -> String {
-    name.replace("-", "_")
-}
-
 #[derive(Debug, thiserror::Error)]
 pub enum Errors {
     #[error("Invalid argument for `{0}` ({1}): {2}")]
@@ -50,7 +46,7 @@ pub fn run(cli: cli::Cli) -> anyhow::Result<()> {
     match cli.module {
         cli::CommandModules::Workspace(module) => match module.command {
             cli::WorkspaceCommands::New(args) => cmd::new_workspace(args),
-            cli::WorkspaceCommands::Init(args) => todo!(),
+            cli::WorkspaceCommands::Init(_args) => todo!(),
             
         },
         cli::CommandModules::Trait(module) => match module.command {

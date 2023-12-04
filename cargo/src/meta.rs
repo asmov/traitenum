@@ -53,11 +53,15 @@ impl LibraryMeta {
     pub fn derive_name(&self) -> &str { &self.derive_name }
     pub fn lib_dir(&self) -> &str { &self.lib_dir }
     pub fn derive_dir(&self) -> &str { &self.derive_dir }
+    pub fn traits(&self) -> &Vec<TraitMeta> { &self.traits }
 }
 
 impl TraitMeta {
-    pub fn name(&self) -> &str { &self.crate_path.split("::").last().unwrap() }
     pub fn crate_path(&self) -> &str { &self.crate_path }
+
+    pub fn name(&self) -> &str {
+        &self.crate_path.split("::").last().unwrap()
+    }
 }
 
 mod build {
