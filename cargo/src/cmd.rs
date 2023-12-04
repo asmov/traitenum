@@ -1,5 +1,6 @@
 use std::{process, path::{PathBuf, Path}};
-use crate::{self as lib};
+use anyhow::Context;
+use crate::{self as lib, str};
 
 pub mod workspace;
 pub mod enumtrait;
@@ -35,21 +36,21 @@ fn find_cargo_manifest_file(from_dir: &Path) -> anyhow::Result<PathBuf> {
     Err(lib::Errors::NoCargoManifestExists(from_dir.into()).into())
 }
 
-pub(crate) fn read_manifest(filepath: &Path) -> anyhow::Result<toml::Table> {
+pub(crate) fn read_manifest(filepath: &Path) -> anyhow::Result<toml::Value> {
     let contents = std::fs::read_to_string(filepath)?;
     toml::from_str(&contents).map_err(|e| anyhow::format_err!("{}", e.message()))
 }
 
-pub(crate) fn find_cargo_workspace_manifest(from_dir: &Path) -> anyhow::Result<(toml::Table, PathBuf)> {
+pub(crate) fn find_cargo_workspace_manifest(from_dir: &Path) -> anyhow::Result<(toml::Value, PathBuf)> {
     // if first manifest found is a package, we'll try once more to find a parent workspace
     let mut dir = from_dir;
 
     while let Ok(manifest_file) = find_cargo_manifest_file(dir) {
         let manifest = read_manifest(&manifest_file)?;
-        if manifest.contains_key("workspace") {
-            if let Some(workspace_table) = manifest["workspace"].as_table() {
-                return Ok((workspace_table.to_owned(), from_dir.into()))
-            }
+        if manifest.as_table()
+                .with_context(|| lib::Errors::InvalidCargoMetadata(str!("workspace"), manifest_file))?
+                .contains_key("workspace") {
+            return Ok((manifest, from_dir.join("Cargo.toml")))
         }
 
         dir = match dir.parent() { Some(d) => d, None => break };

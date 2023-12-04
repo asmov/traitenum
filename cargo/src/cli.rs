@@ -1,5 +1,6 @@
 use clap;
 use std::path::PathBuf;
+use syn;
 
 use crate::str;
 
@@ -61,9 +62,21 @@ pub struct WorkspaceCommand {
 #[derive(clap::Args)]
 #[command(about = "Add a new trait and derive macro to an existing traitenum workspace")]
 pub struct AddTraitCommand {
-    pub trait_name: String,
+    #[arg(value_parser = validate_crate_path)]
+    pub trait_crate_path: String,
     #[arg(long)]
     pub workspace_path: Option<PathBuf>,
     #[arg(long)]
     pub library_name: Option<String>,
+}
+
+fn validate_crate_path(path: &str) -> Result<String, &'static str> {
+    if !path.starts_with("crate::") {
+        return Err("Crate paths must start with 'crate::'");
+    }
+
+    match syn::parse_str::<syn::Path>(path) {
+        Ok(_) => Ok(path.to_owned()),
+        Err(_) => Err("Invalid crate path"),
+    }
 }

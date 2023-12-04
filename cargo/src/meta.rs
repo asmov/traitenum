@@ -16,11 +16,13 @@ use std::path::{PathBuf, Path};
 use anyhow::Context;
 use crate::{self as lib, cmd, str};
 
+#[derive(Debug)]
 pub struct WorkspaceMeta {
     path: PathBuf,
     libraries: Vec<LibraryMeta>
 }
 
+#[derive(Debug)]
 pub struct LibraryMeta {
     name: String,
     lib_name: String,
@@ -30,6 +32,7 @@ pub struct LibraryMeta {
     traits: Vec<TraitMeta>
 }
 
+#[derive(Debug)]
 pub struct TraitMeta {
     crate_path: String,
 }
@@ -67,6 +70,7 @@ impl TraitMeta {
 mod build {
     use std::path::{PathBuf, Path};
 
+    #[derive(Debug)]
     pub struct WorkspaceMeta {
         path: Option<PathBuf>,
         libraries: Vec<LibraryMeta>
@@ -104,6 +108,7 @@ mod build {
         }
     }
 
+    #[derive(Debug)]
     pub struct LibraryMeta {
         name: Option<String>,
         lib_name: Option<String>,
@@ -144,6 +149,7 @@ mod build {
         }
     }
 
+    #[derive(Debug)]
     pub struct TraitMeta {
         crate_path: Option<String>
     }
@@ -166,45 +172,21 @@ mod build {
 }
 
 pub fn build(from_dir: &Path) -> anyhow::Result<WorkspaceMeta> {
-    let (workspace_manifest, workspace_path) = cmd::find_cargo_workspace_manifest(&from_dir)?;
+    let (workspace_manifest, manifest_path) = cmd::find_cargo_workspace_manifest(&from_dir)?;
 
     let mut workspace = build::WorkspaceMeta::new();
-    workspace.path(workspace_path);
+    workspace.path(manifest_path.parent().unwrap().to_path_buf());
 
-    let libraries_metadata = workspace_manifest.get("workspace.metadata.traitenum.library")
-        .with_context(|| lib::Errors::MissingCargoMetadata(
-            str!("workspace.metadata.traitenum.library"), workspace.get_path().to_owned()))?
-        .as_array()
-        .with_context(|| lib::Errors::InvalidCargoMetadata(
-            str!("workspace.metadata.traitenum.library"), workspace.get_path().to_owned()))?;
+    let libraries_metadata = toml_array("workspace.metadata.traitenum.library", &workspace_manifest, "", &manifest_path)?;
 
     let mut libraries: Vec<build::LibraryMeta> = Vec::new();
     let mut i = 0;
     for library_metadata in libraries_metadata {
-        let library_metadata = library_metadata.as_table()
-            .with_context(|| lib::Errors::InvalidCargoMetadata(
-                format!("workspace.metadata.traitenum.library[{}]", i), workspace.get_path().to_owned()))?;
-        
-        let name = library_metadata.get("name")
-            .with_context(|| lib::Errors::MissingCargoMetadata(
-                format!("workspace.metadata.traitenum.library[{}].name", i), workspace.get_path().to_owned()))?
-            .as_str()
-            .with_context(|| lib::Errors::InvalidCargoMetadata(
-                format!("workspace.metadata.traitenum.library[{}].name", i), workspace.get_path().to_owned()))?;
-    
-        let lib_dir = library_metadata.get("lib_dir")
-            .with_context(|| lib::Errors::MissingCargoMetadata(
-                format!("workspace.metadata.traitenum.library[{}].lib_dir", name), workspace.get_path().to_owned()))?
-            .as_str()
-            .with_context(|| lib::Errors::InvalidCargoMetadata(
-                format!("workspace.metadata.traitenum.library[{}].lib_dir", name), workspace.get_path().to_owned()))?;
+        let context = format!("workspace.metadata.traitenum.library[{}]", i);
 
-        let derive_dir = library_metadata.get("derive_dir")
-            .with_context(|| lib::Errors::MissingCargoMetadata(
-                format!("workspace.metadata.traitenum.library[{}].derive_dir", name), workspace.get_path().to_owned()))?
-            .as_str()
-            .with_context(|| lib::Errors::InvalidCargoMetadata(
-                format!("workspace.metadata.traitenum.library[{}].derive_dir", name), workspace.get_path().to_owned()))?;
+        let name = toml_str("name", library_metadata, &context, &manifest_path)?;
+        let lib_dir = toml_str("lib-dir", library_metadata, &context, &manifest_path)?;
+        let derive_dir = toml_str("derive-dir", library_metadata, &context, &manifest_path)?;
 
         let mut library = build::LibraryMeta::new();
         library.name(name.to_owned());
@@ -218,32 +200,16 @@ pub fn build(from_dir: &Path) -> anyhow::Result<WorkspaceMeta> {
         let lib_path = workspace.get_lib_path(&library);
         let derive_path = workspace.get_derive_path(&library);
 
-        let manifest = cmd::read_manifest(&lib_path.join("Cargo.toml"))?;
-        let lib_name = manifest.get("package.name")
-            .with_context(|| lib::Errors::MissingCargoMetadata(str!("package.name"), lib_path.to_owned()))?
-            .as_str()
-            .with_context(|| lib::Errors::InvalidCargoMetadata(str!("package.name"), lib_path.to_owned()))?
-            .to_owned();
-
-        let traits_metadata = manifest.get("package.metadata.traitenum.trait")
-            .with_context(|| lib::Errors::MissingCargoMetadata(str!("package.metadata.traitenum.trait"), lib_path.to_owned()))?
-            .as_array()
-            .with_context(|| lib::Errors::InvalidCargoMetadata(str!("package.metadata.traitenum.trait"), lib_path.to_owned()))?;
+        let manifest_filepath = &lib_path.join("Cargo.toml");
+        let manifest = cmd::read_manifest(&manifest_filepath)?;
+        let lib_name = toml_str("package.name", &manifest, "", &manifest_filepath)?.to_owned();
+        let traits_metadata = toml_array("package.metadata.traitenum.trait", &manifest, "", &manifest_filepath)?;
 
         let mut traits: Vec<build::TraitMeta> = Vec::new();
         let mut i = 0;
         for trait_metadata in traits_metadata {
-            let trait_metadata = trait_metadata.as_table()
-                .with_context(|| lib::Errors::InvalidCargoMetadata(
-                    format!("package.metadata.traitenum.trait[{}]", i), lib_path.to_owned()))?;
-
-            let crate_path = trait_metadata.get("crate-path")
-                .with_context(|| lib::Errors::MissingCargoMetadata(
-                    format!("package.metadata.traitenum.trait[{}]", i), lib_path.to_owned()))?
-                .as_str()
-                .with_context(|| lib::Errors::InvalidCargoMetadata(
-                    format!("package.metadata.traitenum.trait[{}]", i), lib_path.to_owned()))?
-                .to_owned();
+            let context = format!("package.metadata.traitenum.trait[{}]", i);
+            let crate_path = toml_str("crate-path", trait_metadata, &context, &manifest_filepath)?.to_owned();
 
             let mut trait_meta = build::TraitMeta::new();
             trait_meta.crate_path(crate_path);
@@ -251,12 +217,9 @@ pub fn build(from_dir: &Path) -> anyhow::Result<WorkspaceMeta> {
             i += 0;
         }
 
-        let manifest = cmd::read_manifest(&derive_path.join("Cargo.toml"))?;
-        let derive_name = manifest.get("package.name")
-            .with_context(|| lib::Errors::MissingCargoMetadata(str!("package.name"), lib_path.to_owned()))?
-            .as_str()
-            .with_context(|| lib::Errors::InvalidCargoMetadata(str!("package.name"), lib_path.to_owned()))?
-            .to_owned();
+        let manifest_filepath = &derive_path.join("Cargo.toml");
+        let manifest = cmd::read_manifest(&manifest_filepath)?;
+        let derive_name = toml_str("package.name", &manifest, "", &manifest_filepath)?.to_owned();
 
         library.lib_name(lib_name);
         library.derive_name(derive_name);
@@ -268,3 +231,43 @@ pub fn build(from_dir: &Path) -> anyhow::Result<WorkspaceMeta> {
     Ok(workspace.build())
 }
 
+fn toml_path<'toml>(
+    path: &str,
+    toml: &'toml toml::Value,
+    cargo_manifest_filepath: &Path
+) -> anyhow::Result<&'toml toml::Value> {
+    let mut value = toml;
+    for key in path.split(".") {
+        value = value.get(key)
+            .with_context(|| lib::Errors::MissingCargoMetadata(path.to_owned(), cargo_manifest_filepath.to_owned()))?;
+    }
+
+    Ok(value)
+}
+
+fn toml_array<'toml>(
+    path: &str,
+    toml: &'toml toml::Value,
+    context: &str,
+    cargo_manifest_filepath: &Path
+) -> anyhow::Result<&'toml toml::value::Array> {
+    let array = toml_path(path, toml, cargo_manifest_filepath)?
+        .as_array()
+        .with_context(|| lib::Errors::InvalidCargoMetadata(
+            format!("{}.{}", context, path), cargo_manifest_filepath.to_owned()))?;
+
+    Ok(array)
+}
+
+fn toml_str<'toml>(
+    path: &str,
+    toml: &'toml toml::Value,
+    context: &str,
+    cargo_manifest_filepath: &Path
+) -> anyhow::Result<&'toml str> {
+    let string = toml_path(path, toml, cargo_manifest_filepath)?
+        .as_str()
+        .with_context(|| lib::Errors::InvalidCargoMetadata(
+            format!("{}.{}", context, path), cargo_manifest_filepath.to_owned()))?;
+    Ok(string)
+}

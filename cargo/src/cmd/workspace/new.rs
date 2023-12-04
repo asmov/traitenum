@@ -76,8 +76,8 @@ members = [ "%{LIB_DIR}%", "%{DERIVE_DIR}%" ]
 
 [[workspace.metadata.traitenum.library]]
 name = "%{LIBRARY_NAME}%"
-lib_dir = "%{LIB_DIR}%"
-derive_dir = "%{DERIVE_DIR}%"
+lib-dir = "%{LIB_DIR}%"
+derive-dir = "%{DERIVE_DIR}%"
 "#;
 
 fn make_workspace(args: &cli::WorkspaceCommand) -> anyhow::Result<()> {
