@@ -14,6 +14,10 @@ pub fn log(msg: &str) {
     println!("{}{}", "[traitenum] ".cyan(), msg);
 }
 
+pub fn log_warn(msg: &str) {
+    eprintln!("{}{}", "[traitenum] ".yellow(), msg);
+}
+
 pub fn log_success(msg: &str) {
     println!("{}{}", "[traitenum] ".green(), msg);
 }
@@ -40,6 +44,8 @@ pub enum Errors {
     MissingCargoMetadata(String, PathBuf),
     #[error("A cargo workspace cannot be found for path: {0}")]
     NoCargoWorkspaceExists(PathBuf),
+    #[error("The cargo manifest is not a workspace: {0}")]
+    CargoManifestNotWorkspace(PathBuf),
     #[error("Unable to run command: cargo")]
     CargoRunError(),
     #[error("Unable to run command: rustfmt")]

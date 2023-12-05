@@ -34,9 +34,9 @@ pub struct TraitCommandModule {
 #[derive(clap::Subcommand)]
 pub enum WorkspaceCommands {
     #[command(about = "Create a new traitenum workspace containing traits and derive macros")]
-    New(WorkspaceCommand),
+    New(NewWorkspaceCommand),
     #[command(about = "Create new traitenum lib and derive packages in an existing workspace")]
-    Init(WorkspaceCommand),
+    Init(InitWorkspaceCommand),
 }
 
 #[derive(clap::Subcommand)]
@@ -45,8 +45,7 @@ pub enum TraitCommands {
 }
 
 #[derive(clap::Args)]
-pub struct WorkspaceCommand {
-    pub workspace_name: String,
+pub struct LibraryCommand {
      #[arg(long)]
     pub workspace_path: Option<PathBuf>,
      #[arg(long)]
@@ -57,6 +56,20 @@ pub struct WorkspaceCommand {
     pub lib_dir: String,
     #[arg(long, default_value_t = str!("derive"))]
     pub derive_dir: String
+}
+
+#[derive(clap::Args)]
+pub struct NewWorkspaceCommand {
+    pub workspace_name: String,
+    #[clap(flatten)]
+    pub library: LibraryCommand,
+}
+
+#[derive(clap::Args)]
+pub struct InitWorkspaceCommand {
+    pub library_name: String,
+    #[clap(flatten)]
+    pub library: LibraryCommand,
 }
 
 #[derive(clap::Args)]

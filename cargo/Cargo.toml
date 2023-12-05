@@ -1,5 +1,5 @@
 [package]
-name = "traitenum-cargo"
+name = "cargo-traitenum"
 authors = ["Asmov LLC"]
 description = "Cargo subcommands to generate traitenum traits and derive macros"
 version = "0.1.0"

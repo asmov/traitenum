@@ -4,33 +4,33 @@ use convert_case::{self as case, Casing};
 
 use crate::{self as lib, cli, cmd, str};
 
-pub fn new_workspace(mut args: cli::WorkspaceCommand) -> anyhow::Result<()> {
+pub fn new_workspace(mut args: cli::NewWorkspaceCommand) -> anyhow::Result<()> {
     // a common mistake is to specify a path instead of a name as the positional parameter, which we can't handle well
     if args.workspace_name.contains(path::MAIN_SEPARATOR) {
         anyhow::bail!(lib::Errors::InvalidArgument(
             str!("workspace-name"), str!("Try `--workspace-path` instead"), args.workspace_name))
     }
 
-    if let Some(ref workspace_path) = args.workspace_path {
+    if let Some(ref workspace_path) = args.library.workspace_path {
         if workspace_path.is_relative() {
-            args.workspace_path = Some(PathBuf::from(env::current_dir().unwrap())
+            args.library.workspace_path = Some(PathBuf::from(env::current_dir().unwrap())
                 .join(workspace_path));
         }
     } else {
-        args.workspace_path = Some(PathBuf::from(env::current_dir().unwrap())
+        args.library.workspace_path = Some(PathBuf::from(env::current_dir().unwrap())
             .join(&args.workspace_name));
     }
 
-    if args.lib_name.is_none() {
-        args.lib_name = Some(args.workspace_name.clone());
+    if args.library.lib_name.is_none() {
+        args.library.lib_name = Some(args.workspace_name.clone());
     }
 
-    if args.derive_name.is_none() {
-        args.derive_name = Some(format!("{}-{}", args.workspace_name, "derive"));
+    if args.library.derive_name.is_none() {
+        args.library.derive_name = Some(format!("{}-{}", args.workspace_name, "derive"));
     }
 
     // Throw an error if `init` should be used instead of `new`.
-    let workspace_path = args.workspace_path.as_ref().unwrap();
+    let workspace_path = args.library.workspace_path.as_ref().unwrap();
     if cmd::find_cargo_manifest_file(workspace_path).is_ok() {
         anyhow::bail!(lib::Errors::CargoManifestExists(workspace_path.to_owned()));
     }
@@ -80,8 +80,8 @@ lib-dir = "%{LIB_DIR}%"
 derive-dir = "%{DERIVE_DIR}%"
 "#;
 
-fn make_workspace(args: &cli::WorkspaceCommand) -> anyhow::Result<()> {
-    let workspace_path = args.workspace_path.as_ref().unwrap();
+fn make_workspace(args: &cli::NewWorkspaceCommand) -> anyhow::Result<()> {
+    let workspace_path = args.library.workspace_path.as_ref().unwrap();
 
     let cmdout = cargo_new(workspace_path, None)?;
     if !cmdout.status.success() {
@@ -91,9 +91,9 @@ fn make_workspace(args: &cli::WorkspaceCommand) -> anyhow::Result<()> {
     fs::remove_dir_all(workspace_path.join("src"))?;
 
     let workspace_manifest = WORKSPACE_MANIFEST_TEMPLATE
-        .replace(VAR_LIBRARY_NAME, args.lib_name.as_ref().unwrap())
-        .replace(VAR_LIB_DIR, &args.lib_dir)
-        .replace(VAR_DERIVE_DIR, &args.derive_dir);
+        .replace(VAR_LIBRARY_NAME, args.library.lib_name.as_ref().unwrap())
+        .replace(VAR_LIB_DIR, &args.library.lib_dir)
+        .replace(VAR_DERIVE_DIR, &args.library.derive_dir);
 
     fs::write(workspace_path.join("Cargo.toml"), workspace_manifest)?;
 
@@ -125,9 +125,9 @@ pub trait MyTrait {
 }
 "#;
 
-fn make_lib(args: &cli::WorkspaceCommand) -> anyhow::Result<()> {
-    let lib_path = args.workspace_path.as_ref().unwrap().join(&args.lib_dir);
-    let lib_name = args.lib_name.as_ref().unwrap();
+fn make_lib(args: &cli::NewWorkspaceCommand) -> anyhow::Result<()> {
+    let lib_path = args.library.workspace_path.as_ref().unwrap().join(&args.library.lib_dir);
+    let lib_name = args.library.lib_name.as_ref().unwrap();
 
     let cmdout = cargo_new(&lib_path, Some(lib_name))?;
     if !cmdout.status.success() {
@@ -192,10 +192,10 @@ mod tests {
 }
 "#;
 
-fn make_derive(args: &cli::WorkspaceCommand) -> anyhow::Result<()> {
-    let derive_path = args.workspace_path.as_ref().unwrap().join(&args.derive_dir);
-    let derive_name = args.derive_name.as_ref().unwrap();
-    let lib_name = args.lib_name.as_ref().unwrap();
+fn make_derive(args: &cli::NewWorkspaceCommand) -> anyhow::Result<()> {
+    let derive_path = args.library.workspace_path.as_ref().unwrap().join(&args.library.derive_dir);
+    let derive_name = args.library.derive_name.as_ref().unwrap();
+    let lib_name = args.library.lib_name.as_ref().unwrap();
 
     let cmdout = cargo_new(&derive_path, Some(derive_name))?;
     if !cmdout.status.success() {
@@ -223,8 +223,8 @@ fn make_derive(args: &cli::WorkspaceCommand) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn config_lib(args: &cli::WorkspaceCommand) -> anyhow::Result<()> {
-    let lib_path = args.workspace_path.as_ref().unwrap().join(&args.lib_dir);
+fn config_lib(args: &cli::NewWorkspaceCommand) -> anyhow::Result<()> {
+    let lib_path = args.library.workspace_path.as_ref().unwrap().join(&args.library.lib_dir);
 
     //todo
     let traitenum_crate_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -236,9 +236,9 @@ fn config_lib(args: &cli::WorkspaceCommand) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn config_derive(args: &cli::WorkspaceCommand) -> anyhow::Result<()> {
-    let derive_path = args.workspace_path.as_ref().unwrap().join(&args.derive_dir);
-    let lib_name = args.lib_name.as_ref().unwrap();
+fn config_derive(args: &cli::NewWorkspaceCommand) -> anyhow::Result<()> {
+    let derive_path = args.library.workspace_path.as_ref().unwrap().join(&args.library.derive_dir);
+    let lib_name = args.library.lib_name.as_ref().unwrap();
 
     //todo
     let traitenum_lib_crate_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -252,8 +252,8 @@ fn config_derive(args: &cli::WorkspaceCommand) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn build_workspace(args: &cli::WorkspaceCommand) -> anyhow::Result<()> {
-    let workspace_path = args.workspace_path.as_ref().unwrap();
+fn build_workspace(args: &cli::NewWorkspaceCommand) -> anyhow::Result<()> {
+    let workspace_path = args.library.workspace_path.as_ref().unwrap();
 
     env::set_current_dir(workspace_path)?;
     let output = process::Command::new("cargo")
@@ -268,8 +268,8 @@ fn build_workspace(args: &cli::WorkspaceCommand) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn test_workspace(args: &cli::WorkspaceCommand) -> anyhow::Result<()> {
-    let workspace_path = args.workspace_path.as_ref().unwrap();
+fn test_workspace(args: &cli::NewWorkspaceCommand) -> anyhow::Result<()> {
+    let workspace_path = args.library.workspace_path.as_ref().unwrap();
     cmd::cargo_test(workspace_path)
 }
 

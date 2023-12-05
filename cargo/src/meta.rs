@@ -14,7 +14,7 @@
 //! 
 use std::path::{PathBuf, Path};
 use anyhow::Context;
-use crate::{self as lib, cmd, str};
+use crate::{self as lib, cmd};
 
 #[derive(Debug)]
 pub struct WorkspaceMeta {
@@ -68,7 +68,7 @@ impl TraitMeta {
 }
 
 mod build {
-    use std::path::{PathBuf, Path};
+    use std::path::PathBuf;
 
     #[derive(Debug)]
     pub struct WorkspaceMeta {
@@ -86,7 +86,6 @@ mod build {
 
         pub fn path(&mut self, path: PathBuf) -> &mut Self { self.path = Some(path); self }
         /// Panics if path is not set.
-        pub fn get_path(&self) -> &Path { self.path.as_ref().unwrap() }
         pub fn libraries(&mut self, mut libraries: Vec<LibraryMeta>) -> &mut Self { self.libraries.append(&mut libraries); self }
 
         /// Panics if path or library.lib_dir is not set.

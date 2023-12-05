@@ -19,10 +19,11 @@ pub fn add_trait(args: cli::AddTraitCommand) -> anyhow::Result<()> {
         workspace.libraries().first().unwrap()
     } else if workspace.libraries().len() > 1 {
         let library_name = match &args.library_name {
-            Some(l) => l,
+            Some(name) => name,
             None => anyhow::bail!(lib::Errors::AmbiguousLibrary)
         };
-        workspace.libraries().iter().find(|l| l.name() == library_name)
+
+        workspace.libraries().iter().find(|lib| lib.name() == library_name)
             .context(lib::Errors::LibraryNotFound(library_name.to_owned()))?
     } else {
         anyhow::bail!(lib::Errors::MisconfiguredCargoMetadata(str!("No traitenum libraries found")))
@@ -90,7 +91,7 @@ fn add_derive_macro(
 
 fn update_cargo_manifest(
     args: &cli::AddTraitCommand,
-    trait_crate_path: &syn::Path,
+    _trait_crate_path: &syn::Path,
     workspace: &meta::WorkspaceMeta,
     library: &LibraryMeta
 ) -> anyhow::Result<()> {

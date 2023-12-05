@@ -41,14 +41,25 @@ pub(crate) fn read_manifest(filepath: &Path) -> anyhow::Result<toml::Value> {
     toml::from_str(&contents).map_err(|e| anyhow::format_err!("{}", e.message()))
 }
 
+pub(crate) fn read_workspace_manifest(filepath: &Path) -> anyhow::Result<toml::Value> {
+    let manifest = read_manifest(&filepath)?;
+    if manifest.as_table()
+        .with_context(|| lib::Errors::NoCargoManifestExists(filepath.to_owned()))?
+        .contains_key("workspace") {
+            Ok(manifest)
+    } else {
+        anyhow::bail!(lib::Errors::NoCargoManifestExists(filepath.to_owned()))
+    }
+}
+
 pub(crate) fn find_cargo_workspace_manifest(from_dir: &Path) -> anyhow::Result<(toml::Value, PathBuf)> {
     // if first manifest found is a package, we'll try once more to find a parent workspace
     let mut dir = from_dir;
 
     while let Ok(manifest_file) = find_cargo_manifest_file(dir) {
-        let manifest = read_manifest(&manifest_file)?;
+        let manifest = read_workspace_manifest(&manifest_file)?;
         if manifest.as_table()
-                .with_context(|| lib::Errors::InvalidCargoMetadata(str!("workspace"), manifest_file))?
+                .with_context(|| lib::Errors::NoCargoManifestExists(manifest_file))?
                 .contains_key("workspace") {
             return Ok((manifest, from_dir.join("Cargo.toml")))
         }
