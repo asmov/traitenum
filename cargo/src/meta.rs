@@ -12,7 +12,7 @@
 //! 
 //! Package names and directory paths are customizable.
 //! 
-use std::path::{PathBuf, Path};
+use std::{path::{PathBuf, Path}, mem::zeroed};
 use anyhow::Context;
 use crate::{self as lib, cmd};
 
@@ -284,6 +284,49 @@ pub(crate) fn toml_array_mut<'toml>(
             format!("{}.{}", context, path), cargo_manifest_filepath.to_owned()))?;
 
     Ok(array)
+}
+
+pub(crate) fn toml_force_array<'toml>(
+    path: &str,
+    toml: &'toml mut toml::Value,
+    context: &str,
+    cargo_manifest_filepath: &Path
+) -> anyhow::Result<&'toml mut toml::value::Array> {
+    // if it already exists, return the existing array
+    /*if let Ok(val) = toml_path_mut(path, toml, cargo_manifest_filepath) {
+        let array = val.as_array_mut()
+            .with_context(|| lib::Errors::InvalidCargoMetadata(
+                format!("{}.{}", context, path), cargo_manifest_filepath.to_owned()))?;
+
+        return Ok(array);
+    }*/
+
+    // create an empty array
+    let mut value = toml;
+    let keys: Vec<&str> = path.split(".").collect();
+    let last_idx = keys.len() - 1;
+    let mut i = 0;
+    for key in keys {
+        if let Some(v) = value.get_mut(key) {
+            value = v;
+        } else {
+            if i < last_idx {  // not the last key
+                value.as_table_mut()
+                    .with_context(|| lib::Errors::InvalidCargoMetadata(path.to_owned(), cargo_manifest_filepath.to_owned()))?
+                    .insert(key.to_owned(), toml::Value::Table(toml::Table::new())).unwrap();
+                value = value.get_mut(key).unwrap();
+            } else {
+                value.as_table_mut()
+                    .with_context(|| lib::Errors::InvalidCargoMetadata(path.to_owned(), cargo_manifest_filepath.to_owned()))?
+                    .insert(key.to_owned(), toml::Value::Array(toml::value::Array::new())).unwrap();
+                value = value.get_mut(key).unwrap();
+            }
+        };
+
+        i += 1;
+    }
+
+    Ok(value.as_array_mut().unwrap())
 }
 
 pub(crate) fn toml_str<'toml>(

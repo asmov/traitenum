@@ -6,6 +6,7 @@ pub mod workspace;
 pub mod enumtrait;
 
 pub use workspace::new::new_workspace;
+pub use workspace::init::init_workspace;
 pub use enumtrait::add::add_trait;
 
 fn quote_error(errmsg: String) -> String {

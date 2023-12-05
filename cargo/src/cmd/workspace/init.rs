@@ -4,7 +4,7 @@ use crate::{self as lib, cli, cmd, meta};
 pub fn init_workspace(mut args: cli::InitWorkspaceCommand) -> anyhow::Result<()> {
     // clarify to the user that library.lib_name and library_name are the same
     // todo: remove lib_name from the common
-    if args.library.lib_name.is_some() && args.library_name != args.library.lib_name.unwrap() {
+    if args.library.lib_name.is_some() {
         lib::log_warn("Using preferred `<LIBRARY_NAME>` argument instead of `--lib-name`")
     } else {
         args.library.lib_name = Some(args.library_name.clone());
@@ -27,25 +27,29 @@ pub fn init_workspace(mut args: cli::InitWorkspaceCommand) -> anyhow::Result<()>
     // Throw an error if `new` should be used instead of `init`.
     let workspace_path = args.library.workspace_path.as_ref().unwrap();
     let workspace_manifest_filepath = cmd::find_cargo_manifest_file(&workspace_path)?;
-    let workspace_manifest = cmd::read_workspace_manifest(&workspace_manifest_filepath)?;
+    let mut workspace_manifest = cmd::read_workspace_manifest(&workspace_manifest_filepath)?;
 
-    /*lib::log("Creating lib package ...");
-    make_lib(&args)?;
-    lib::log("Creating derive package ...");
-    make_derive(&args)?;
     lib::log("Updating workspace ...");
-    update_workspace(&args)?;
+    update_workspace(&mut workspace_manifest, &workspace_manifest_filepath)?;
+    lib::log("Creating lib package ...");
+    super::make_lib(&args.library)?;
+    lib::log("Creating derive package ...");
+    super::make_derive(&args.library)?;
     lib::log("Configuring lib package ...");
-    config_lib(&args)?;
+    super::config_lib(&args.library)?;
     lib::log("Configuring derive package ...");
-    config_derive(&args)?;
+    super::config_derive(&args.library)?;
     lib::log("Building workspace ...");
-    build_workspace(&args)?;
+    super::build_workspace(&args.library)?;
     lib::log("Testing workspace ...");
-    test_workspace(&args)?;
+    super::test_workspace(&args.library)?;
     lib::log_success("Your traitenum workspace is ready.");
-    */
 
     Ok(())
+}
 
+fn update_workspace(manifest: &mut toml::Value, workspace_manifest_filepath: &Path) -> anyhow::Result<()> {
+    let library_metadata = meta::toml_force_array("workspace.metadata.traitenum.library", manifest, "", workspace_manifest_filepath)?;
+
+    Ok(())
 }

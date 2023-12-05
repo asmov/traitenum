@@ -62,7 +62,7 @@ pub fn run(cli: cli::Cli) -> anyhow::Result<()> {
     match cli.module {
         cli::CommandModules::Workspace(module) => match module.command {
             cli::WorkspaceCommands::New(args) => cmd::new_workspace(args),
-            cli::WorkspaceCommands::Init(_args) => todo!(),
+            cli::WorkspaceCommands::Init(args) => cmd::init_workspace(args),
             
         },
         cli::CommandModules::Trait(module) => match module.command {
