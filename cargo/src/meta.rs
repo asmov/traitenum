@@ -12,7 +12,7 @@
 //! 
 //! Package names and directory paths are customizable.
 //! 
-use std::{path::{PathBuf, Path}, mem::zeroed};
+use std::path::{PathBuf, Path};
 use anyhow::Context;
 use crate::{self as lib, cmd};
 
@@ -292,6 +292,7 @@ pub(crate) fn toml_ensure_array<'toml>(
     context: &str,
     cargo_manifest_filepath: &Path
 ) -> anyhow::Result<&'toml mut toml::value::Array> {
+    let context = format!("{}.{}", context, path);
     let mut value = toml;
     let keys: Vec<&str> = path.split(".").collect();
     let last_idx = keys.len() - 1;
@@ -307,7 +308,7 @@ pub(crate) fn toml_ensure_array<'toml>(
                     continue;
                 } else {
                     // we would be overwriting something here unexpectedly
-                    anyhow::bail!(lib::Errors::InvalidCargoMetadata(path.to_owned(), cargo_manifest_filepath.to_owned()))
+                    anyhow::bail!(lib::Errors::InvalidCargoManifestKey(context.to_owned(), cargo_manifest_filepath.to_owned()))
                 }
             }
         }
@@ -315,12 +316,12 @@ pub(crate) fn toml_ensure_array<'toml>(
         // otherwise, create a new value for the key; tables for each until the last key, then an array.
         if i != last_idx {
             value.as_table_mut()
-                .with_context(|| lib::Errors::InvalidCargoMetadata(path.to_owned(), cargo_manifest_filepath.to_owned()))?
+                .with_context(|| lib::Errors::InvalidCargoManifestKey(context.to_owned(), cargo_manifest_filepath.to_owned()))?
                 .insert(key.to_owned(), toml::Value::Table(toml::Table::new()));
             value = value.get_mut(key).unwrap();
         } else {  // last key
             value.as_table_mut()
-                .with_context(|| lib::Errors::InvalidCargoMetadata(path.to_owned(), cargo_manifest_filepath.to_owned()))?
+                .with_context(|| lib::Errors::InvalidCargoManifestKey(context.to_owned(), cargo_manifest_filepath.to_owned()))?
                 .insert(key.to_owned(), toml::Value::Array(toml::value::Array::new()));
             value = value.get_mut(key).unwrap();
         }

@@ -45,11 +45,11 @@ pub(crate) fn read_manifest(filepath: &Path) -> anyhow::Result<toml::Value> {
 pub(crate) fn read_workspace_manifest(filepath: &Path) -> anyhow::Result<toml::Value> {
     let manifest = read_manifest(&filepath)?;
     if manifest.as_table()
-        .with_context(|| lib::Errors::NoCargoManifestExists(filepath.to_owned()))?
+        .with_context(|| lib::Errors::InvalidCargoManifest(filepath.to_owned()))?
         .contains_key("workspace") {
             Ok(manifest)
     } else {
-        anyhow::bail!(lib::Errors::NoCargoManifestExists(filepath.to_owned()))
+        anyhow::bail!(lib::Errors::CargoManifestNotWorkspace(filepath.to_owned()))
     }
 }
 

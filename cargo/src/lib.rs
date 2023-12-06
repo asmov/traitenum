@@ -40,6 +40,10 @@ pub enum Errors {
     NoCargoManifestExists(PathBuf),
     #[error("Invalid metadata for `{0}` in cargo manifest dir: {1}")]
     InvalidCargoMetadata(String, PathBuf),
+    #[error("Unable to parse cargo manifest: {0}")]
+    InvalidCargoManifest(PathBuf),
+    #[error("Unable to parse cargo manifest for key `{0}`: {1}")]
+    InvalidCargoManifestKey(String, PathBuf),
     #[error("Missing metadata for `{0}` in cargo manifest dir: {1}")]
     MissingCargoMetadata(String, PathBuf),
     #[error("A cargo workspace cannot be found for path: {0}")]
