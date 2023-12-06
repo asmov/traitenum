@@ -2,6 +2,23 @@ traitenum
 =========
 A Rust library for using fieldless enums as schema definitions.
 
+Packages
+--------
+- [cargo-traitneum](./cargo): Cargo addon that initializes traitenum workspaces and adds / removes traitenum traits
+- [traitenum](./macro): Macros used to define traitenum traits
+- [traitenum-lib](./lib): Exports used by traitenum macros
+
+Documents
+---------
+- [Roadmap](./docs/Roadmap.md): Planned fixes and enhancements
+- [COPYING](./COPYING.txt): The GPL3 licensing declaration as displayed below.
+- [LICENSE](./LICENSE.txt): The complete GPL3 license definition.
+
+Structure
+---------
+- [Documents](./docs)
+- [tests/exporter](./tests/exporter/): Compile testing of a traitenum workspace crate.
+- [tests/importer](./tests/exporter/): Compile testing of a traitenum end-user crate.
 
 
 License (GPL 3)
