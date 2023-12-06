@@ -1,5 +1,5 @@
 use std::{env, path::{PathBuf, Path}};
-use crate::{self as lib, cli, cmd, meta};
+use crate::{self as lib, cli, cmd, meta, str};
 
 pub fn init_workspace(mut args: cli::InitWorkspaceCommand) -> anyhow::Result<()> {
     // clarify to the user that library.lib_name and library_name are the same
@@ -30,7 +30,7 @@ pub fn init_workspace(mut args: cli::InitWorkspaceCommand) -> anyhow::Result<()>
     let mut workspace_manifest = cmd::read_workspace_manifest(&workspace_manifest_filepath)?;
 
     lib::log("Updating workspace ...");
-    update_workspace(&mut workspace_manifest, &workspace_manifest_filepath)?;
+    update_workspace(&args, &mut workspace_manifest, &workspace_manifest_filepath)?;
     lib::log("Creating lib package ...");
     super::make_lib(&args.library)?;
     lib::log("Creating derive package ...");
@@ -48,8 +48,28 @@ pub fn init_workspace(mut args: cli::InitWorkspaceCommand) -> anyhow::Result<()>
     Ok(())
 }
 
-fn update_workspace(manifest: &mut toml::Value, workspace_manifest_filepath: &Path) -> anyhow::Result<()> {
-    let library_metadata = meta::toml_force_array("workspace.metadata.traitenum.library", manifest, "", workspace_manifest_filepath)?;
+fn update_workspace(
+    args: &cli::InitWorkspaceCommand,
+    manifest: &mut toml::Value,
+    workspace_manifest_filepath: &Path
+) -> anyhow::Result<()> {
+    let members_data = meta::toml_ensure_array(
+        "workspace.members", manifest, "", workspace_manifest_filepath)?;
+
+    members_data.push(toml::Value::String(args.library.lib_dir.to_owned()));
+    members_data.push(toml::Value::String(args.library.derive_dir.to_owned()));
+
+    let library_metadata = meta::toml_ensure_array(
+        "workspace.metadata.traitenum.library", manifest, "", workspace_manifest_filepath)?;
+
+    let mut library_table = toml::Table::new();
+    library_table.insert(str!("derive-dir"), toml::Value::String(args.library.derive_dir.to_owned()));
+    library_table.insert(str!("lib-dir"), toml::Value::String(args.library.lib_dir.to_owned()));
+    library_table.insert(str!("name"), toml::Value::String(args.library_name.to_owned()));
+
+    library_metadata.push(toml::Value::Table(library_table));
+
+    std::fs::write(workspace_manifest_filepath, toml::to_string_pretty(manifest).unwrap()).unwrap();
 
     Ok(())
 }
