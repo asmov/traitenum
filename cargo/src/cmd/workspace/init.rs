@@ -4,45 +4,45 @@ use crate::{self as lib, cli, cmd, meta, str};
 pub fn init_workspace(mut args: cli::InitWorkspaceCommand) -> anyhow::Result<()> {
     // clarify to the user that library.lib_name and library_name are the same
     // todo: remove lib_name from the common
-    if args.library.lib_name.is_some() {
+    if args.module.lib_name.is_some() {
         lib::log_warn("Using preferred `<LIBRARY_NAME>` argument instead of `--lib-name`")
     } else {
-        args.library.lib_name = Some(args.library_name.clone());
+        args.module.lib_name = Some(args.library_name.clone());
     }
 
-    if let Some(ref workspace_path) = args.library.workspace_path {
+    if let Some(ref workspace_path) = args.module.workspace_path {
         if workspace_path.is_relative() {
-            args.library.workspace_path = Some(PathBuf::from(env::current_dir().unwrap())
+            args.module.workspace_path = Some(PathBuf::from(env::current_dir().unwrap())
                 .join(workspace_path));
         }
     } else {
-        args.library.workspace_path = Some(PathBuf::from(env::current_dir().unwrap())
+        args.module.workspace_path = Some(PathBuf::from(env::current_dir().unwrap())
             .join(&args.library_name));
     }
 
-    if args.library.derive_name.is_none() {
-        args.library.derive_name = Some(format!("{}-{}", args.library_name, "derive"));
+    if args.module.derive_name.is_none() {
+        args.module.derive_name = Some(format!("{}-{}", args.library_name, "derive"));
     }
 
     // Throw an error if `new` should be used instead of `init`.
-    let workspace_path = args.library.workspace_path.as_ref().unwrap();
+    let workspace_path = args.module.workspace_path.as_ref().unwrap();
     let workspace_manifest_filepath = cmd::find_cargo_manifest_file(&workspace_path)?;
     let mut workspace_manifest = cmd::read_workspace_manifest(&workspace_manifest_filepath)?;
 
     lib::log("Updating workspace ...");
     update_workspace(&args, &mut workspace_manifest, &workspace_manifest_filepath)?;
     lib::log("Creating lib package ...");
-    super::make_lib(&args.library)?;
+    super::make_lib(&args.module)?;
     lib::log("Creating derive package ...");
-    super::make_derive(&args.library)?;
+    super::make_derive(&args.module)?;
     lib::log("Configuring lib package ...");
-    super::config_lib(&args.library)?;
+    super::config_lib(&args.module)?;
     lib::log("Configuring derive package ...");
-    super::config_derive(&args.library)?;
+    super::config_derive(&args.module)?;
     lib::log("Building workspace ...");
-    super::build_workspace(&args.library)?;
+    super::build_workspace(&args.module)?;
     lib::log("Testing workspace ...");
-    super::test_workspace(&args.library)?;
+    super::test_workspace(&args.module)?;
     lib::log_success("Your traitenum workspace is ready.");
 
     Ok(())
@@ -56,15 +56,15 @@ fn update_workspace(
     let members_data = meta::toml_ensure_array(
         "workspace.members", manifest, "", workspace_manifest_filepath)?;
 
-    members_data.push(toml::Value::String(args.library.lib_dir.to_owned()));
-    members_data.push(toml::Value::String(args.library.derive_dir.to_owned()));
+    members_data.push(toml::Value::String(args.module.lib_dir.to_owned()));
+    members_data.push(toml::Value::String(args.module.derive_dir.to_owned()));
 
     let library_metadata = meta::toml_ensure_array(
         "workspace.metadata.traitenum.library", manifest, "", workspace_manifest_filepath)?;
 
     let mut library_table = toml::Table::new();
-    library_table.insert(str!("derive-dir"), toml::Value::String(args.library.derive_dir.to_owned()));
-    library_table.insert(str!("lib-dir"), toml::Value::String(args.library.lib_dir.to_owned()));
+    library_table.insert(str!("derive-dir"), toml::Value::String(args.module.derive_dir.to_owned()));
+    library_table.insert(str!("lib-dir"), toml::Value::String(args.module.lib_dir.to_owned()));
     library_table.insert(str!("name"), toml::Value::String(args.library_name.to_owned()));
 
     library_metadata.push(toml::Value::Table(library_table));

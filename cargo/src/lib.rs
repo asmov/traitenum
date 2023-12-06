@@ -28,6 +28,8 @@ pub enum Errors {
     InvalidArgument(String, String, String),
     #[error("Trait already exists in library `{1}`: {0}")]
     DuplicateTrait(String, String),
+    #[error("Trait does not exist in library `{1}`: {0}")]
+    UnknownTrait(String, String),
     #[error("Misconfigured cargo metadata: {0}")]
     MisconfiguredCargoMetadata(String),
     #[error("Missing --library-name argument (Multiple libraries exist)")]

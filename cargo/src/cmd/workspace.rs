@@ -41,7 +41,7 @@ pub trait MyTrait {
 }
 "#;
 
-fn make_lib(library: &cli::LibraryCommand) -> anyhow::Result<()> {
+fn make_lib(library: &cli::WorkspaceCommand) -> anyhow::Result<()> {
     let lib_path = library.workspace_path.as_ref().unwrap().join(&library.lib_dir);
     let lib_name = library.lib_name.as_ref().unwrap();
 
@@ -108,7 +108,7 @@ mod tests {
 }
 "#;
 
-fn make_derive(library: &cli::LibraryCommand) -> anyhow::Result<()> {
+fn make_derive(library: &cli::WorkspaceCommand) -> anyhow::Result<()> {
     let derive_path = library.workspace_path.as_ref().unwrap().join(&library.derive_dir);
     let derive_name = library.derive_name.as_ref().unwrap();
     let lib_name = library.lib_name.as_ref().unwrap();
@@ -139,7 +139,7 @@ fn make_derive(library: &cli::LibraryCommand) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn config_lib(library: &cli::LibraryCommand) -> anyhow::Result<()> {
+fn config_lib(library: &cli::WorkspaceCommand) -> anyhow::Result<()> {
     let lib_path = library.workspace_path.as_ref().unwrap().join(&library.lib_dir);
 
     //todo
@@ -152,7 +152,7 @@ fn config_lib(library: &cli::LibraryCommand) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn config_derive(library: &cli::LibraryCommand) -> anyhow::Result<()> {
+fn config_derive(library: &cli::WorkspaceCommand) -> anyhow::Result<()> {
     let derive_path = library.workspace_path.as_ref().unwrap().join(&library.derive_dir);
     let lib_name = library.lib_name.as_ref().unwrap();
 
@@ -168,7 +168,7 @@ fn config_derive(library: &cli::LibraryCommand) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn build_workspace(library: &cli::LibraryCommand) -> anyhow::Result<()> {
+fn build_workspace(library: &cli::WorkspaceCommand) -> anyhow::Result<()> {
     let workspace_path = library.workspace_path.as_ref().unwrap();
 
     env::set_current_dir(workspace_path)?;
@@ -184,7 +184,7 @@ fn build_workspace(library: &cli::LibraryCommand) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn test_workspace(library: &cli::LibraryCommand) -> anyhow::Result<()> {
+fn test_workspace(library: &cli::WorkspaceCommand) -> anyhow::Result<()> {
     let workspace_path = library.workspace_path.as_ref().unwrap();
     cmd::cargo_test(workspace_path)
 }

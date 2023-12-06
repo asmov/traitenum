@@ -4,9 +4,9 @@ A Rust library for using fieldless enums as schema definitions.
 
 Packages
 --------
-- [cargo-traitneum](./cargo) : Cargo addon that initializes traitenum workspaces and adds / removes traitenum traits
 - [traitenum](./macro) : Macros used to define traitenum traits
 - [traitenum-lib](./lib) : Exports used by traitenum macros
+- [cargo-traitneum](./cargo) : Cargo addon that initializes traitenum workspaces and adds / removes traitenum traits
 
 Documents
 ---------

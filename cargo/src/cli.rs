@@ -45,7 +45,7 @@ pub enum TraitCommands {
 }
 
 #[derive(clap::Args)]
-pub struct LibraryCommand {
+pub struct WorkspaceCommand {
      #[arg(long)]
     pub workspace_path: Option<PathBuf>,
      #[arg(long)]
@@ -62,19 +62,18 @@ pub struct LibraryCommand {
 pub struct NewWorkspaceCommand {
     pub workspace_name: String,
     #[clap(flatten)]
-    pub library: LibraryCommand,
+    pub library: WorkspaceCommand,
 }
 
 #[derive(clap::Args)]
 pub struct InitWorkspaceCommand {
     pub library_name: String,
     #[clap(flatten)]
-    pub library: LibraryCommand,
+    pub module: WorkspaceCommand,
 }
 
 #[derive(clap::Args)]
-#[command(about = "Add a new trait and derive macro to an existing traitenum workspace")]
-pub struct AddTraitCommand {
+pub struct TraitCommand {
     #[arg(value_parser = validate_crate_path)]
     pub trait_crate_path: String,
     #[arg(long)]
@@ -82,6 +81,21 @@ pub struct AddTraitCommand {
     #[arg(long)]
     pub library_name: Option<String>,
 }
+
+#[derive(clap::Args)]
+#[command(about = "Add a new trait and derive macro to an existing traitenum workspace")]
+pub struct AddTraitCommand {
+    #[clap(flatten)]
+    pub module: TraitCommand
+}
+
+#[derive(clap::Args)]
+#[command(about = "Remove an existing trait and derive macro to an existing traitenum workspace")]
+pub struct RemoveTraitCommand {
+    #[clap(flatten)]
+    pub module: TraitCommand
+}
+
 
 fn validate_crate_path(path: &str) -> Result<String, &'static str> {
     if !path.starts_with("crate::") {

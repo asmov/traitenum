@@ -6,7 +6,7 @@ use convert_case::{self as case, Casing};
 use crate::{self as lib, cli, meta::{self, LibraryMeta}, str, cmd};
 
 pub fn add_trait(args: cli::AddTraitCommand) -> anyhow::Result<()> {
-    let dir = if let Some(ref workspace_path) = args.workspace_path {
+    let dir = if let Some(ref workspace_path) = args.module.workspace_path {
         workspace_path.to_owned()
     } else {
         env::current_dir()?
@@ -18,7 +18,7 @@ pub fn add_trait(args: cli::AddTraitCommand) -> anyhow::Result<()> {
     let library = if workspace.libraries().len() == 1 {
         workspace.libraries().first().unwrap()
     } else if workspace.libraries().len() > 1 {
-        let library_name = match &args.library_name {
+        let library_name = match &args.module.library_name {
             Some(name) => name,
             None => anyhow::bail!(lib::Errors::AmbiguousLibrary)
         };
@@ -29,19 +29,19 @@ pub fn add_trait(args: cli::AddTraitCommand) -> anyhow::Result<()> {
         anyhow::bail!(lib::Errors::MisconfiguredCargoMetadata(str!("No traitenum libraries found")))
     };
 
-    if library.traits().iter().find(|t| t.crate_path() == args.trait_crate_path).is_some() {
-        anyhow::bail!(lib::Errors::DuplicateTrait(args.trait_crate_path, library.name().to_owned()))
+    if library.traits().iter().find(|t| t.crate_path() == args.module.trait_crate_path).is_some() {
+        anyhow::bail!(lib::Errors::DuplicateTrait(args.module.trait_crate_path, library.name().to_owned()))
     }
 
-    let trait_crate_path: syn::Path = syn::parse_str(&args.trait_crate_path).unwrap();
+    let trait_crate_path: syn::Path = syn::parse_str(&args.module.trait_crate_path).unwrap();
 
-    lib::log("Adding lib trait ...");
+    lib::log("Adding trait to lib package...");
     add_lib_trait(&trait_crate_path, &workspace, library)?;
-    lib::log("Adding derive macro ...");
+    lib::log("Adding macro to derive package...");
     add_derive_macro(&trait_crate_path, &workspace, library)?;
-    lib::log("Adding derive integration test ...");
+    lib::log("Creating integration test for derive package ...");
     build_derive_test(&args, &trait_crate_path, &workspace, library)?;
-    lib::log("Updating lib cargo manifest ...");
+    lib::log("Updating cargo manifest for lib package ...");
     update_cargo_manifest(&args, &trait_crate_path, &workspace, library)?;
     lib::log("Testing workspace ...");
     test_workspace(workspace)?;
@@ -101,7 +101,7 @@ fn update_cargo_manifest(
     let traits_metadata = meta::toml_array_mut("package.metadata.traitenum.trait", &mut manifest, "", &manifest_filepath)?;
 
     let mut trait_table = toml::Table::new();
-    trait_table.insert(str!("crate-path"), toml::Value::String(args.trait_crate_path.to_owned()));
+    trait_table.insert(str!("crate-path"), toml::Value::String(args.module.trait_crate_path.to_owned()));
     traits_metadata.push(toml::Value::Table(trait_table));
 
     fs::write(manifest_filepath, toml::to_string_pretty(&manifest).unwrap())?;
@@ -115,7 +115,7 @@ fn build_derive_test(
     workspace: &meta::WorkspaceMeta,
     library: &LibraryMeta
 ) -> anyhow::Result<()> {
-    let trait_relpath = args.trait_crate_path.strip_prefix("crate::").unwrap();
+    let trait_relpath = args.module.trait_crate_path.strip_prefix("crate::").unwrap();
     let trait_snake_name = trait_crate_path.segments.last().unwrap().ident
         .to_string().to_case(case::Case::Snake);
 
