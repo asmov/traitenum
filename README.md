@@ -17,8 +17,8 @@ Documents
 Structure
 ---------
 - [Documents](./docs)
-- [Export Tests](./tests/exporter/): Compile testing of a traitenum workspace crate.
-- [Import Tests](./tests/exporter/): Compile testing of a traitenum end-user crate.
+- [Export Tests](./tests/exporter/) : Compile testing of a traitenum workspace crate.
+- [Import Tests](./tests/exporter/) : Compile testing of a traitenum end-user crate.
 
 
 License (GPL 3)
