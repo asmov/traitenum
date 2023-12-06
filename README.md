@@ -11,14 +11,14 @@ Packages
 Documents
 ---------
 - [Roadmap](./docs/Roadmap.md): Planned fixes and enhancements
-- [COPYING](./COPYING.txt): The GPL3 licensing declaration as displayed below.
-- [LICENSE](./LICENSE.txt): The complete GPL3 license definition.
+- [Copying](./COPYING.txt): The GPL3 licensing declaration as displayed below.
+- [License](./LICENSE.txt): The complete GPL3 license definition.
 
 Structure
 ---------
 - [Documents](./docs)
-- [tests/exporter](./tests/exporter/): Compile testing of a traitenum workspace crate.
-- [tests/importer](./tests/exporter/): Compile testing of a traitenum end-user crate.
+- [Export Tests](./tests/exporter/): Compile testing of a traitenum workspace crate.
+- [Import Tests](./tests/exporter/): Compile testing of a traitenum end-user crate.
 
 
 License (GPL 3)
