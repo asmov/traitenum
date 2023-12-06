@@ -1,9 +1,12 @@
-# traitenum 
-A library for using Rust enums as data-type definitions.
+traitenum 
+=========
+A Rust library for using fieldless enums as schema definitions.
 
-## License (GPL 3)
-```
-traitenum: A library for using Rust enums as data-type definitions
+
+
+License (GPL 3)
+---------------
+traitenum: A Rust library for using fieldless enums as schema definitions.  
 Copyright (C) 2023 Asmov LLC
 
 This program is free software: you can redistribute it and/or modify
@@ -17,5 +20,4 @@ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
-along with this program.  If not, see <https://www.gnu.org/licenses/>.
-```
+along with this program.  If not, see [https://www.gnu.org/licenses/].

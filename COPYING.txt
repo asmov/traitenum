@@ -1,4 +1,4 @@
-traitenum: A library for using Rust enums as data-type definitions
+traitenum: A Rust library for using fieldless enums as schema definitions.
 Copyright (C) 2023 Asmov LLC
 
 This program is free software: you can redistribute it and/or modify
