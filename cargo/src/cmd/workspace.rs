@@ -26,14 +26,14 @@ edition = "2021"
 purpose = "lib"
 
 [[package.metadata.traitenum.trait]]
-crate-path = "crate::MyTrait"
+crate-path = "crate::ExampleTrait"
 "#;
 
 const LIB_SRC_TEMPLATE: &'static str =
 r#"use traitenum::enumtrait;
 
-#[enumtrait(crate::MyTrait)]
-pub trait MyTrait {
+#[enumtrait(crate::ExampleTrait)]
+pub trait ExampleTrait {
     #[enumtrait::Str()]
     fn nickname(&self) -> &'static str;
     #[enumtrait::Num(preset(Ordinal))]
@@ -75,20 +75,20 @@ purpose = "derive"
 const DERIVE_SRC_TEMPLATE: &'static str =
 r#"traitenum_lib::gen_require!(%{LIB_CRATE_NAME}%, %{DERIVE_CRATE_NAME}%);
 
-traitenum_lib::gen_derive_macro!(MyTraitEnum, derive_traitenum_mytrait, traitlib::TRAITENUM_MODEL_BYTES_MYTRAIT);
+traitenum_lib::gen_derive_macro!(ExampleTraitEnum, derive_traitenum_example_trait, traitlib::TRAITENUM_MODEL_BYTES_EXAMPLE_TRAIT);
 "#;
 
 
-const DERIVE_SAMPLE_TEST_TEMPLATE: &'static str =
+const DERIVE_EXAMPLE_TEST_TEMPLATE: &'static str =
 r#"
 #[cfg(test)]
 mod tests {
-    use %{LIB_CRATE_NAME}%::MyTrait;
+    use %{LIB_CRATE_NAME}%::ExampleTrait;
 
     #[test]
-    fn mytrait() {
-        #[derive(%{DERIVE_CRATE_NAME}%::MyTraitEnum)]
-        enum MyEnum {
+    fn example_trait() {
+        #[derive(%{DERIVE_CRATE_NAME}%::ExampleTraitEnum)]
+        enum ExampleEnum {
             #[traitenum(nickname("a"))]
             Alpha,
             #[traitenum(nickname("b"))]
@@ -97,13 +97,13 @@ mod tests {
             Charlie
         }
 
-        assert_eq!("a", MyEnum::Alpha.nickname());
-        assert_eq!("b", MyEnum::Bravo.nickname());
-        assert_eq!("c", MyEnum::Charlie.nickname());
+        assert_eq!("a", ExampleEnum::Alpha.nickname());
+        assert_eq!("b", ExampleEnum::Bravo.nickname());
+        assert_eq!("c", ExampleEnum::Charlie.nickname());
 
-        assert_eq!(0, MyEnum::Alpha.ordinal());
-        assert_eq!(1, MyEnum::Bravo.ordinal());
-        assert_eq!(2, MyEnum::Charlie.ordinal());
+        assert_eq!(0, ExampleEnum::Alpha.ordinal());
+        assert_eq!(1, ExampleEnum::Bravo.ordinal());
+        assert_eq!(2, ExampleEnum::Charlie.ordinal());
     }
 }
 "#;
@@ -129,12 +129,12 @@ fn make_derive(library: &cli::WorkspaceCommand) -> anyhow::Result<()> {
 
     fs::write(derive_path.join("src").join("lib.rs"), derive_src)?;
 
-    let derive_sample_test = DERIVE_SAMPLE_TEST_TEMPLATE
+    let derive_example_test = DERIVE_EXAMPLE_TEST_TEMPLATE
         .replace(VAR_LIB_CRATE_NAME, &lib_name.to_case(case::Case::Snake))
         .replace(VAR_DERIVE_CRATE_NAME, &derive_name.to_case(case::Case::Snake));
 
     fs::create_dir_all(derive_path.join("tests"))?;
-    fs::write(derive_path.join("tests").join("mytrait.rs"), derive_sample_test)?;
+    fs::write(derive_path.join("tests").join("example_trait.rs"), derive_example_test)?;
 
     Ok(())
 }

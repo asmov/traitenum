@@ -8,6 +8,7 @@ pub mod enumtrait;
 pub use workspace::new::new_workspace;
 pub use workspace::init::init_workspace;
 pub use enumtrait::add::add_trait;
+pub use enumtrait::remove::remove_trait;
 
 fn quote_error(errmsg: String) -> String {
     let errmsg = errmsg.replace("error: ", "");
@@ -84,4 +85,18 @@ fn cargo_test(dir: &Path) -> anyhow::Result<()> {
 
     Ok(())
 }
+
+pub(crate) fn rustfmt(filepath: &Path) -> anyhow::Result<()> {
+    let output = process::Command::new("rustfmt")
+        .arg(filepath.to_str().unwrap())
+        .output()
+        .context(lib::Errors::RustfmtRunError())?;
+
+    if output.status.success() {
+       Ok(()) 
+    } else {
+        return Err(lib::Errors::RustfmtRunError().into())
+    }
+}
+
 

@@ -42,6 +42,7 @@ pub enum WorkspaceCommands {
 #[derive(clap::Subcommand)]
 pub enum TraitCommands {
     Add(AddTraitCommand),
+    Remove(RemoveTraitCommand),
 }
 
 #[derive(clap::Args)]

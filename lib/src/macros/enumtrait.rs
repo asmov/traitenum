@@ -1,6 +1,7 @@
 use quote::{self, ToTokens};
 use syn::{self, spanned::Spanned};
 use proc_macro2;
+use convert_case::{self as case, Casing};
 
 use crate::{
     model, macros, model::parse,
@@ -22,7 +23,8 @@ pub fn enumtrait_macro(attr: proc_macro2::TokenStream, item: proc_macro2::TokenS
         -> Result<proc_macro2::TokenStream, syn::Error> {
     let EnumTraitMacroOutput {tokens, model} = parse_enumtrait_macro(attr, item)?;
     let model_name = syn::Ident::new(
-        &format!("{}{}", macros::MODEL_BYTES_NAME, model.identifier().name().to_uppercase()), proc_macro2::Span::call_site());
+        &format!("{}{}", macros::MODEL_BYTES_NAME, model.identifier().name().to_case(case::Case::ScreamingSnake)),
+        proc_macro2::Span::call_site());
 
     let bytes = model.serialize().unwrap();
     let bytes_len = bytes.len();

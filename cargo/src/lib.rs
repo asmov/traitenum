@@ -24,6 +24,8 @@ pub fn log_success(msg: &str) {
 
 #[derive(Debug, thiserror::Error)]
 pub enum Errors {
+    #[error("Unable to parse source-code. {0}: {1}")]
+    SourceParsing(String, PathBuf),
     #[error("Invalid argument for `{0}` ({1}): {2}")]
     InvalidArgument(String, String, String),
     #[error("Trait already exists in library `{1}`: {0}")]
@@ -73,6 +75,7 @@ pub fn run(cli: cli::Cli) -> anyhow::Result<()> {
         },
         cli::CommandModules::Trait(module) => match module.command {
             cli::TraitCommands::Add(args) => cmd::add_trait(args),
+            cli::TraitCommands::Remove(args) => cmd::remove_trait(args),
         }
     }
 }

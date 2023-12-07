@@ -1,4 +1,4 @@
-use std::{fs, process, env, path::Path};
+use std::{fs, process, env};
 use anyhow::Context;
 use syn;
 use quote::{self, ToTokens};
@@ -41,7 +41,7 @@ pub fn add_trait(args: cli::AddTraitCommand) -> anyhow::Result<()> {
     add_derive_macro(&trait_crate_path, &workspace, library)?;
     lib::log("Creating integration test for derive package ...");
     build_derive_test(&args, &trait_crate_path, &workspace, library)?;
-    lib::log("Updating cargo manifest for lib package ...");
+    lib::log("Updating lib package manifest ...");
     update_cargo_manifest(&args, &trait_crate_path, &workspace, library)?;
     lib::log("Testing workspace ...");
     test_workspace(workspace)?;
@@ -82,9 +82,9 @@ fn add_derive_macro(
 
     let mut derive_src_file = syn::parse_file(&derive_src).unwrap();
     derive_src_file.items.push(trait_item);
-    fs::write(&derive_src_path, derive_src_file.to_token_stream().to_string())?;
 
-    rustfmt(&derive_src_path)?;
+    fs::write(&derive_src_path, derive_src_file.to_token_stream().to_string())?;
+    cmd::rustfmt(&derive_src_path)?;
 
     Ok(())
 }
@@ -175,19 +175,6 @@ fn derive_item(trait_crate_path: &syn::Path) -> syn::Item {
     };
 
     syn::parse2(item).unwrap()
-}
-
-fn rustfmt(filepath: &Path) -> anyhow::Result<()> {
-    let output = process::Command::new("rustfmt")
-        .arg(filepath.to_str().unwrap())
-        .output()
-        .context(lib::Errors::RustfmtRunError())?;
-
-    if output.status.success() {
-       Ok(()) 
-    } else {
-        return Err(lib::Errors::RustfmtRunError().into())
-    }
 }
 
 const VAR_LIB_CRATE_NAME: &'static str = "%{LIB_CRATE_NAME}%";
