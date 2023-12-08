@@ -2,9 +2,17 @@ traitenum
 =========
 A Rust library for using fieldless enums as schema definitions.
 
-Traits are defined with a configurable set of const properties. Enums are defined, with each variant filling in property values using attributes. 
+In short, a trait is declared with a configurable set of const properties,   using attributes for each method. An enum is then derived for that trait, with each variant filling in property values via attributes.
 
 Relations between traits / enums can be defined as OneToOne, OneToMany, and ManyToOne.
+
+Properties support defaults and presets. Supported primitive types include:
+- Str (static)
+- Num (usize, i64, f32, etc.)
+- Enum
+- Bool
+
+Default methods for traits can be used to extend functionality.
 
 Example
 -------
