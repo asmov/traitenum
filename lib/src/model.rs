@@ -1,6 +1,7 @@
 use std::{fmt::Display, str::FromStr, collections::HashMap, collections::hash_map};
 
 use serde;
+use convert_case::{self as case, Casing};
 
 pub mod parse;
 
@@ -137,19 +138,33 @@ pub enum ReturnType {
     Type
 }
 
+impl ReturnType {
+    pub const BOOL: &'static str = "bool";
+    pub const STATIC_STR: &'static str = "&'static str";
+    pub const UNSIGNED_SIZE: &'static str = "usize";
+    pub const UNSIGNED_INTEGER_64: &'static str = "u64";
+    pub const INTEGER_64: &'static str = "i64";
+    pub const FLOAT_64: &'static str = "f64";
+    pub const UNSIGNED_INTEGER_32: &'static str = "u32";
+    pub const INTEGER_32: &'static str = "i32";
+    pub const FLOAT_32: &'static str = "f32";
+    pub const BYTE: &'static str = "u8";
+}
+
 impl Display for ReturnType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ReturnType::Bool => write!(f, "bool"),
-            ReturnType::StaticStr => write!(f, "&'static str"),
-            ReturnType::UnsignedSize => write!(f, "usize"),
-            ReturnType::UnsignedInteger64 => write!(f, "u64"),
-            ReturnType::Integer64 => write!(f, "u64"),
-            ReturnType::Float64 => write!(f, "f64"),
-            ReturnType::UnsignedInteger32 => write!(f, "u32"),
-            ReturnType::Integer32 => write!(f, "i32"),
-            ReturnType::Float32 => write!(f, "f32"),
-            ReturnType::Byte => write!(f, "u8"),
+            ReturnType::Bool => f.write_str(Self::BOOL),
+            ReturnType::StaticStr => f.write_str(Self::STATIC_STR),
+            ReturnType::UnsignedSize => f.write_str(Self::UNSIGNED_SIZE),
+            ReturnType::UnsignedInteger64 => f.write_str(Self::UNSIGNED_INTEGER_64),
+            ReturnType::Integer64 => f.write_str(Self::INTEGER_64),
+            ReturnType::Float64 => f.write_str(Self::FLOAT_64),
+            ReturnType::UnsignedInteger32 => f.write_str(Self::UNSIGNED_INTEGER_32),
+            ReturnType::Integer32 => f.write_str(Self::INTEGER_32),
+            ReturnType::Float32 => f.write_str(Self::FLOAT_32),
+            ReturnType::Byte => f.write_str(Self::BYTE),
+            // complex types
             ReturnType::BoxedTrait => write!(f, "Box<dyn Trait>"),
             ReturnType::BoxedTraitIterator => write!(f, "Box<dyn Iterator<Item = dyn Trait>"),
             ReturnType::AssociatedType => write!(f, "<Self::Type>"),
@@ -162,18 +177,19 @@ impl Display for ReturnType {
 impl FromStr for ReturnType {
     type Err = ();
 
+    /// Matches on primitive supported types only.
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "bool" => Ok(Self::Bool),
-            "&'static str" => Ok(Self::StaticStr),
-            "usize" => Ok(Self::UnsignedSize),
-            "u64" => Ok(Self::UnsignedInteger64),
-            "i64" => Ok(Self::Integer64),
-            "f64" => Ok(Self::Float64),
-            "u32" => Ok(Self::UnsignedInteger32),
-            "i32" => Ok(Self::Integer32),
-            "f32" => Ok(Self::Float32),
-            "u8" => Ok(Self::Byte),
+            Self::BOOL => Ok(Self::Bool),
+            Self::STATIC_STR => Ok(Self::StaticStr),
+            Self::UNSIGNED_SIZE => Ok(Self::UnsignedSize),
+            Self::UNSIGNED_INTEGER_64 => Ok(Self::UnsignedInteger64),
+            Self::INTEGER_64 => Ok(Self::Integer64),
+            Self::FLOAT_64 => Ok(Self::Float64),
+            Self::UNSIGNED_INTEGER_32 => Ok(Self::UnsignedInteger32),
+            Self::INTEGER_32 => Ok(Self::Integer32),
+            Self::FLOAT_32 => Ok(Self::Float32),
+            Self::BYTE => Ok(Self::Byte),
             _ => Err(())
         }
     }
@@ -437,9 +453,7 @@ impl AttributeDefinition {
             AttributeDefinition::Bool(_booldef) => None,
             AttributeDefinition::StaticStr(ref strdef) => {
                 let preset = match &strdef.preset { Some(p) => p, None => return None };
-                match preset {
-                    StringPreset::Variant => Some(Value::StaticStr(variant_name.to_owned())),
-                }
+                Some(Value::StaticStr(preset.convert(variant_name)))
             },
             AttributeDefinition::UnsignedSize(ref numdef) => preset_numdef!(Value::UnsignedSize, usize, numdef),
             AttributeDefinition::UnsignedInteger64(ref numdef) => preset_numdef!(Value::UnsignedInteger64, u64, numdef),
@@ -575,13 +589,34 @@ impl<N> NumberAttributeDefinition<N> {
     }
 }
 
+/// Presets use the variant name as input and output a case conversion using the [convert_case](https://docs.rs/convert_case/latest/convert_case/enum.Case.html)
+/// crate. The `Variant` preset does no conversion.
 #[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum StringPreset {
+    /// The unaltered variant name
     Variant,
-    //Lower,
-    //Upper,
-    //Snake,
-    //Slug
+    /// "my_variant_name"
+    Snake, 
+    /// "MY_VARIANT_NAME"
+    UpperSnake,
+    /// "my-variant-name"
+    Kebab,
+    /// "MY-VARIANT-NAME"
+    UpperKebab,
+     /// "myVariantName"
+    Camel,
+    /// "My Variant Name"
+    Title,
+    /// "MY VARIANT NAME"
+    Upper,
+    /// "my variant name"
+    Lower,
+   /// "myvariantname"
+    Flat,
+    /// "MYVARIANTNAME"
+    UpperFlat,
+    /// "My-Variable-Name"
+    Train
 }
 
 impl FromStr for StringPreset {
@@ -589,8 +624,38 @@ impl FromStr for StringPreset {
 
     fn from_str(variant_name: &str) -> Result<Self, Self::Err> {
         match variant_name {
-            "Variant" | "variant" | "VARIANT" => Ok(Self::Variant),
+            "Variant" => Ok(Self::Variant),
+            "Snake" => Ok(Self::Snake),
+            "UpperSnake" => Ok(Self::UpperSnake),
+            "Kebab" => Ok(Self::Kebab),
+            "UpperKebab" => Ok(Self::UpperKebab),
+            "Camel" => Ok(Self::Camel),
+            "Title" => Ok(Self::Title),
+            "Upper" => Ok(Self::Upper),
+            "Lower" => Ok(Self::Lower),
+            "Flat" => Ok(Self::Flat),
+            "UpperFlat" => Ok(Self::UpperFlat),
+            "Train" => Ok(Self::Train),
             _ => Err(())
+        }
+    }
+}
+
+impl StringPreset {
+    pub fn convert(&self, text: &str) -> String {
+        match self {
+            Self::Variant => text.to_owned(),
+            Self::Snake => text.to_case(case::Case::Snake),
+            Self::UpperSnake => text.to_case(case::Case::ScreamingSnake),
+            Self::Kebab => text.to_case(case::Case::Kebab),
+            Self::UpperKebab => text.to_case(case::Case::UpperKebab),
+            Self::Camel => text.to_case(case::Case::Camel),
+            Self::Title => text.to_case(case::Case::Title),
+            Self::Upper => text.to_case(case::Case::Upper),
+            Self::Lower => text.to_case(case::Case::Lower),
+            Self::Flat => text.to_case(case::Case::Flat),
+            Self::UpperFlat => text.to_case(case::Case::UpperFlat),
+            Self::Train => text.to_case(case::Case::Train),
         }
     }
 }
@@ -606,8 +671,8 @@ impl FromStr for NumberPreset {
 
     fn from_str(variant_name: &str) -> Result<Self, Self::Err> {
         match variant_name {
-            "Ordinal" | "ordinal" | "ORDINAL" => Ok(Self::Ordinal),
-            "Serial" | "serial" | "SERIAL" => Ok(Self::Serial),
+            "Ordinal" => Ok(Self::Ordinal),
+            "Serial" => Ok(Self::Serial),
             _ => Err(())
         }
     }
