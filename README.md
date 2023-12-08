@@ -2,6 +2,76 @@ traitenum
 =========
 A Rust library for using fieldless enums as schema definitions.
 
+Traits are defined with a configurable set of const properties. Enums are defined, with each variant filling in property values using attributes. 
+
+Relations between traits / enums can be defined as OneToOne, OneToMany, and ManyToOne.
+
+Example
+-------
+
+```rust
+// ... my-trait-crate/src/lib.rs ...
+
+#[enumtrait(crate::MyParentTrait)]
+pub trait MyParentTrait {
+    #[enumtrait::Str()]
+    pub fn alias(&self) -> &'static str;
+
+    #[enumtrait::Num(preset(Serial), start(1), increment(100))]
+    pub fn index(&self) -> usize;
+
+    #[enumtrait::Rel(nature(OneToMany))]
+    pub fn children(&self) -> Box<dyn Iterator<Item = Box<dyn MyChildTrait>>>;
+}
+
+#[enumtrait(crate::MyChildTrait)]
+pub trait MyChildTrait {
+    #[enumtrait::Str(preset(Kebab))]
+    pub fn kebab_name(&self) -> &'static str;
+
+    #[enumtrait::Num()]
+    pub fn column(&self) -> i32;
+
+    #[enumtrait::Rel(nature(ManyToOne))]
+    pub fn parent(&self) -> Box<dyn MyParentTrait>;
+}
+
+// ... my-enum-crate/src/lib.rs ...
+
+#[derive(MyParentTrait)]
+pub enum MyParentEnum {
+    #[traitenum(alias("Uno"), children(MyFirstChildEnum))]
+    First,
+    #[traitenum(alias("Dos"), children(MySecondChildEnum))]
+    Second,
+}
+
+#[derive(MyChildTrait)]
+#[traitenum(parent(MyParentEnum::First))]
+pub enum MyFirstChildEnum {
+    #[traitenum(column(1))]
+    AlphaBravo,
+    #[traitenum(column(3))]
+    CharlieDelta,
+}
+
+#[derive(MyChildTrait)]
+#[traitenum(parent(MyParentEnum::Second))]
+pub enum MySecondChildEnum {
+    #[traitenum(column(2))]
+    EchoFoxtrot,
+    #[traitenum(column(4))]
+    GolfHotel 
+}
+
+// ... testing ...
+
+assert_eq!(1, MyFirstChildEnum::AlphaBravo.column())
+assert_eq!("echo-foxtrot", MySecondChildEnum::EchoFoxtrot.kebab_name())
+assert_eq!("Uno", MyFirstChildEnum::CharlieDelta.parent().alias())
+assert_eq!(2, MyParentEnum::Second.children().nth(0).unwrap().column())
+```
+
 Packages
 --------
 - [traitenum](./macro) : Macros used to define traitenum traits
@@ -11,6 +81,7 @@ Packages
 Documents
 ---------
 - [Roadmap](./docs/Roadmap.md) : Planned fixes and enhancements
+- [Design: Version 0](./docs/design/v0/README.md): Design notes for Version 0
 - [Copying](./COPYING.txt) : The GPL3 licensing declaration as displayed below.
 - [License](./LICENSE.txt) : The complete GPL3 license definition.
 
