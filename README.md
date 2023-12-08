@@ -9,7 +9,7 @@ Relations (`Rel`) between traits / enums can be defined with a `nature` of:
 - `OneToMany` - Provides an iterator over another enum's variants
 - `ManyToOne` -Points to a single variant of another enum
 
-Properties support defaults and presets. Supported primitive types include:
+Supported types include:
 - `Str` (static)
 - `Num` (usize, i64, f32, etc.)
 - `Enum`
@@ -18,6 +18,8 @@ Properties support defaults and presets. Supported primitive types include:
 Default implementations for trait methods can be used to extend functionality.
 
 Each method signature must properly correspond with its attribute. On the other hand, attributes can be elided from method signatures, both partially or completely. `Num`, for example, uses the method signature to determine what specific type of primitive to support (f64, u8, etc.).
+
+Properties support defaults and presets.
 
 Presets set a default value for a property in a pre-determined way:
 - `Str` converts the variant name (snake case, kebab case, etc.)
