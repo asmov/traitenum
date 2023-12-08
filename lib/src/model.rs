@@ -166,7 +166,7 @@ impl Display for ReturnType {
             ReturnType::Byte => f.write_str(Self::BYTE),
             // complex types
             ReturnType::BoxedTrait => write!(f, "Box<dyn Trait>"),
-            ReturnType::BoxedTraitIterator => write!(f, "Box<dyn Iterator<Item = dyn Trait>"),
+            ReturnType::BoxedTraitIterator => write!(f, "Box<dyn Iterator<Item = Box<dyn Trait>>>"),
             ReturnType::AssociatedType => write!(f, "<Self::Type>"),
             ReturnType::Enum => write!(f, "<Enum>"),
             ReturnType::Type => write!(f, "<Type>"),
@@ -275,7 +275,7 @@ impl AttributeDefinition {
                     Some("Rel") | None => {
                         let mut attr_def = AttributeDefinition::Relation(RelationAttributeDefinition::new(id));
                         let rel_def = attr_def.get_relation_definition_mut();
-                        rel_def.dispatch = Some(Dispatch::Dynamic);
+                        rel_def.dispatch = Some(Dispatch::BoxedTrait);
                         attr_def
                     },
                     Some(s) => {
@@ -292,7 +292,7 @@ impl AttributeDefinition {
                     Some("Rel") | None => {
                         let mut attr_def = AttributeDefinition::Relation(RelationAttributeDefinition::new(id));
                         let rel_def = attr_def.get_relation_definition_mut();
-                        rel_def.dispatch = Some(Dispatch::Dynamic);
+                        rel_def.dispatch = Some(Dispatch::BoxedTrait);
                         rel_def.nature = Some(RelationNature::OneToMany);
                         attr_def
                     },
@@ -303,11 +303,12 @@ impl AttributeDefinition {
                     } 
                 }
             },
+            //TODO: remove
             ReturnType::AssociatedType => {
                 chk_defname!(RelationAttributeDefinition::DEFINITION_NAME);
                 let id = return_identifier.ok_or("Missing Identifier for ReturnType::AssociatedType")?;
                 let mut reldef = RelationAttributeDefinition::new(id);
-                reldef.dispatch = Some(Dispatch::Static);
+                reldef.dispatch = Some(Dispatch::Other);
                 AttributeDefinition::Relation(reldef)
             },
             // Enums will never be implied as their type cannot be determined without reflection
@@ -752,8 +753,10 @@ impl FromStr for RelationNature {
 
 #[derive(Copy, Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum Dispatch {
-    Static,
-    Dynamic
+    /// Box<dyn Trait> and Box<dyn Iterator<Item = Box<dyn Trait>>>
+    BoxedTrait,
+    /// This is a placeholder to future-proof expansion
+    Other
 }
 
 impl FromStr for Dispatch {
@@ -761,8 +764,8 @@ impl FromStr for Dispatch {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "Static" => Ok(Self::Static),
-            "Dynamic" => Ok(Self::Dynamic),
+            "BoxedTrait" => Ok(Self::BoxedTrait),
+            "Other" => Ok(Self::Other),
             _ => Err(())
         }
     }
@@ -794,8 +797,8 @@ impl RelationAttributeDefinition {
 
     pub fn validate(&self) -> Result<(), &str> {
         match self.dispatch{
-            Some(Dispatch::Dynamic) => {},
-            Some(Dispatch::Static) => return Err("Static dispatch is currently unimplemented"),
+            Some(Dispatch::BoxedTrait) => {},
+            Some(Dispatch::Other) => return Err("Dispatch::Other is permanently unimplemented"),
             None => return Err("Missing property for Rel definition: nature")
         }
 

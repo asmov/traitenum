@@ -347,6 +347,7 @@ fn clean_helper_attributes(trait_input: &mut syn::ItemTrait) -> syn::Result<()> 
     Ok(())
 }
 
+//TODO: remove
 fn build_associated_types(
     partial_types: &mut Vec<model::AssociatedTypePartial>,
     methods: &Vec<model::Method>) -> syn::Result<Vec<model::AssociatedType>>
@@ -361,8 +362,8 @@ fn build_associated_types(
         };
 
         match relation_def.dispatch() {
-            Some(model::Dispatch::Static) => {},
-            Some(model::Dispatch::Dynamic) => continue,
+            Some(model::Dispatch::BoxedTrait) => continue,
+            Some(model::Dispatch::Other) => synerr!("Dispatch::Other is permanently unimplemented"),
             None => unreachable!("Dispatch should be set by now")
         }
 

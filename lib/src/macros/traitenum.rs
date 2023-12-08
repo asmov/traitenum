@@ -48,7 +48,7 @@ pub(crate) fn parse_traitenum_macro(
                 match reldef.nature.unwrap() {
                     model::RelationNature::OneToMany => {
                         match dispatch { 
-                            model::Dispatch::Dynamic => {
+                            model::Dispatch::BoxedTrait => {
                                 let iterator_ident = syn::Ident::new(
                                     &format!("{}{}", rel_id.name(), IDENT_BOXED_ITERATOR), span!());
                                 
@@ -58,17 +58,17 @@ pub(crate) fn parse_traitenum_macro(
                                     }
                                 }
                             },
-                            model::Dispatch::Static => unimplemented!("Static dispatch is not currently implemented")
+                            model::Dispatch::Other => unimplemented!("Dispatch::Other is permanently unimplemented")
                         }
                     },
                     model::RelationNature::ManyToOne | model::RelationNature::OneToOne => {
                         match dispatch { 
-                            model::Dispatch::Dynamic => return quote::quote!{
+                            model::Dispatch::BoxedTrait => return quote::quote!{
                                 fn #func(&self) -> #return_type {
                                     ::std::boxed::Box::new(#relation_path)
                                 }
                             },
-                            model::Dispatch::Static => unimplemented!("Static dispatch is not currently implemented")
+                            model::Dispatch::Other => unimplemented!("Dispatch::Other is permanently unimplemented")
                         }
                     }
                 }
@@ -102,6 +102,7 @@ pub(crate) fn parse_traitenum_macro(
         output
     });
 
+    //todo: remove
     // define an associated type for each of the traitenum's statically dispatched relations
     // e.g., enum Foo { type OtherTraitEnum = OtherEnum; ... }
     let type_outputs = traitenum.relation_enums().filter_map(|(relation_name, relation_enum_id)| {
@@ -118,8 +119,8 @@ pub(crate) fn parse_traitenum_macro(
             _ => unreachable!("Mismatched AttributeDefinition variant for traitenum relation: {}", relation_name)
         };
 
-        // skip dynamic dispatch
-        if let Some(model::Dispatch::Dynamic) = reldef.dispatch() {
+        // skip boxed trait dispatch
+        if let Some(model::Dispatch::BoxedTrait) = reldef.dispatch() {
             return None;
         }
 
@@ -138,8 +139,7 @@ pub(crate) fn parse_traitenum_macro(
         })
     });
 
-    let dynamic_relation_iterators_outputs = build_dynamic_relation_iterators(&enumtrait, &traitenum)?;
-    let static_relation_iterators_outputs = build_static_relation_iterators(&enumtrait, &traitenum)?;
+    let boxed_trait_relation_iterators_outputs = build_boxed_trait_relation_iterators(&enumtrait, &traitenum)?;
 
     let input_ident = &input.ident;
 
@@ -149,8 +149,7 @@ pub(crate) fn parse_traitenum_macro(
             #(#method_outputs)*
         }
 
-        #(#dynamic_relation_iterators_outputs)*
-        #(#static_relation_iterators_outputs)*
+        #(#boxed_trait_relation_iterators_outputs)*
     };
 
     Ok(TraitEnumMacroOutput {
@@ -275,12 +274,12 @@ const IDENT_ITERATOR: &'static str = "Iterator";
 const IDENT_BOXED_ITERATOR: &'static str = "BoxedIterator";
 
 // Creates iterator structs and implementations for dynamically dispatched many-to-many relations
-fn build_dynamic_relation_iterators(
+fn build_boxed_trait_relation_iterators(
     enumtrait: &model::EnumTrait,
     traitenum: &model::TraitEnum) -> syn::Result<Vec<proc_macro2::TokenStream>>
 {
     let structs = enumtrait.relation_methods().iter()
-        .filter(|(_, rel)| rel.dispatch().unwrap() == model::Dispatch::Dynamic)
+        .filter(|(_, rel)| rel.dispatch().unwrap() == model::Dispatch::BoxedTrait)
         .filter(|(_, rel)| rel.nature().unwrap() == model::RelationNature::ManyToOne)
         .map(|(_method, _relation_def)| {
             // The name of the iterator struct. E.g., MyEnumBoxedIterator
@@ -334,60 +333,3 @@ fn build_dynamic_relation_iterators(
 
     Ok(structs)
 }
-
-// Creates iterator structs and implementations for many-to-many statically dispatched relations
-fn build_static_relation_iterators(
-    enumtrait: &model::EnumTrait,
-    traitenum: &model::TraitEnum) -> syn::Result<Vec<proc_macro2::TokenStream>>
-{
-    let structs = enumtrait.types().iter()
-        .filter(|t| t.nature() == model::RelationNature::OneToMany)
-        .map(|associated_type| {
-            let iterator_ident = syn::Ident::new(&format!("{}{}", associated_type.name(), IDENT_ITERATOR), span!());
-            let traitenum_ident = syn::Ident::new(traitenum.identifier().name(), span!());
-
-            // Build the match body for the Iterator's next(). This simply maps a traitenum variant by its ordinal.
-            let mut ordinal: usize = 0;
-            let next_ordinal_match_body = traitenum.variants().iter().map(|variant| {
-                let variant_ident = syn::Ident::new(variant.name(), span!());
-                let output = quote::quote!{
-                    #ordinal => ::std::option::Option::Some(#traitenum_ident::#variant_ident),
-                };
-
-                ordinal += 1;
-                output
-            });
-
-            // Build the Iterator struct, it's new function, and it's Iterator implementation for the traitenum.
-            quote::quote!{
-                struct #iterator_ident {
-                    next_ordinal: usize
-                }
-
-                impl #iterator_ident {
-                    fn new() -> Self {
-                        Self {
-                            next_ordinal: 0
-                        }
-                    }
-                }
-
-                impl ::std::iter::Iterator for #iterator_ident {
-                    type Item = #traitenum_ident;
-
-                    fn next(&mut self) -> std::option::Option<Self::Item> {
-                        let ordinal = self.next_ordinal;
-                        self.next_ordinal += 1;
-                        match ordinal {
-                            #(#next_ordinal_match_body)*
-                            _ => ::std::option::Option::None
-                        }
-                    }
-                }
-            }
-        })
-        .collect();
-
-    Ok(structs)
-}
-

@@ -118,7 +118,7 @@ mod tests {
     }
     
     #[test]
-    fn test_parse_enumtrait_dynamic_relations() {
+    fn test_parse_enumtrait_boxed_trait_relations() {
         let attribute_src = quote::quote!{
             crate::tests::MyTrait
         };
@@ -126,7 +126,7 @@ mod tests {
         let item_src = quote::quote!{
             pub trait MyTrait {
                 // test Rel dynamic many-to-one
-                #[enumtrait::Rel(nature(ManyToOne), dispatch(Dynamic))]
+                #[enumtrait::Rel(nature(ManyToOne), dispatch(BoxedTrait))]
                 fn many_to_one_dyn(&self) -> Box<dyn FirstOneTrait>;
 
                 // test Rel many-to-one dynamic (elided)
@@ -134,7 +134,7 @@ mod tests {
                 fn many_to_one_dyn_elide(&self) -> Box<dyn SecondOneTrait>;
 
                 // test Rel dynamic one-to-many
-                #[enumtrait::Rel(nature(OneToMany), dispatch(Dynamic))]
+                #[enumtrait::Rel(nature(OneToMany), dispatch(BoxedTrait))]
                 fn one_to_many_dyn(&self) -> Box<dyn Iterator<Item = Box<dyn FirstManyTrait>>>;
 
                 // test elided Rel dynamic one-to-many
@@ -194,7 +194,7 @@ mod tests {
             pub trait MyTrait {
                 type ManyType: ManyTrait;
 
-                #[traitenum::Rel(dispatch(Static))]
+                #[traitenum::Rel(dispatch(Other))]
                 fn many_to_one(&self) -> Self::ManyType;
             }
         };
@@ -202,7 +202,7 @@ mod tests {
         assert!(enumtrait::parse_enumtrait_macro(
             simple_attribute_src.clone(),
             unimplemented_static_dispatch_src).is_err(),
-            "Static dispatch is not currently supported and should throw an Error");
+            "Dispatch::Other is permanently unimplemented and should throw an Error");
 
         let unimplemented_implied_static_dispatch_src = quote::quote!{
             pub trait MyTrait {
@@ -215,6 +215,6 @@ mod tests {
         assert!(enumtrait::parse_enumtrait_macro(
             simple_attribute_src.clone(),
             unimplemented_implied_static_dispatch_src).is_err(),
-            "Implied static dispatch is not currently supported and should throw an Error");
+            "Implied static dispatch is not supported and should throw an Error");
     }
 }
