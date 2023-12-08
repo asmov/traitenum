@@ -9,13 +9,16 @@ Version 1
 - Support crate::paths aside from the root crate path
   + lib / macro
   + cargo
-- Remove old static dispatch code
+- Remove static dispatch code
+  - Remove associated types
+  - Restrict use of associated types
+- One-to-One relationships
 - Implement a common TraitEnum trait for each enum, including:
   + type StaticIterator: Iterator<Item = Self>
-  + variant_iter() -> Self::StaticIterator
-  + from_variant_name(&str) -> Option<Self>
-  + variant_name(&self) -> &'static str :: Str(preset(Variant))
   + variant_ordinal(&self) -> usize :: Num(preset(Ordinal))
+  + variant_iter() -> Self::StaticIterator
+  + variant_name(&self) -> &'static str :: Str(preset(Variant))
+  + from_variant_name(&str) -> Option<Self>
 - Document, Refactor, Test
   + lib / macro
   + cargo
