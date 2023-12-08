@@ -27,6 +27,14 @@ Presets set a default value for a property in a pre-determined way:
 
 Both default and preset values can be overridden by each enum variant.
 
+Relationships require a method signature to return:
+- `OneToOne` and `ManyToOne`
+  + `-> Box<dyn OtherTrait>`
+- `OneToMany`
+  + `-> Box<dyn Iterator<Item = Box<dyn OtherTrait>>>`
+
+We'll take care of the rest!
+
 Example
 -------
 
