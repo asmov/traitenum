@@ -102,50 +102,12 @@ pub(crate) fn parse_traitenum_macro(
         output
     });
 
-    //todo: remove
-    // define an associated type for each of the traitenum's statically dispatched relations
-    // e.g., enum Foo { type OtherTraitEnum = OtherEnum; ... }
-    let type_outputs = traitenum.relation_enums().filter_map(|(relation_name, relation_enum_id)| {
-        // all of the errors should have been handled during model parsing, so we panic here instead of Err 
-        // fetch the attribute definition with the same name as the relation's name 
-        let attribute_definition = enumtrait.methods().iter()
-            .find(|m| { m.name() == relation_name })
-            .expect(&format!("No matching relation definition for enum relation: {}", relation_name))
-            .attribute_definition();
-
-        // grab the associated relation definition for the attribute, which contains its Self::<Type> Identifier
-        let reldef = match attribute_definition {
-            model::AttributeDefinition::Relation(ref reldef) => reldef,
-            _ => unreachable!("Mismatched AttributeDefinition variant for traitenum relation: {}", relation_name)
-        };
-
-        // skip boxed trait dispatch
-        if let Some(model::Dispatch::BoxedTrait) = reldef.dispatch() {
-            return None;
-        }
-
-        let associated_type = enumtrait.types().iter().find(|t| t.relation_name() == relation_name)
-            .expect(&format!("No matching associated type for enum relation: {}", relation_name));
-
-        let type_ident = syn::Ident::new(associated_type.name(), span!());
-        let enum_ident = if relation_enum_id.path().is_empty() {
-            syn::Path::from(relation_enum_id)
-        } else {
-            syn::Path::from(relation_enum_id.base().unwrap())
-        };
-        
-        Some(quote::quote!{
-            type #type_ident = #enum_ident;
-        })
-    });
-
     let boxed_trait_relation_iterators_outputs = build_boxed_trait_relation_iterators(&enumtrait, &traitenum)?;
 
     let input_ident = &input.ident;
 
     let output = quote::quote!{
         impl #trait_ident for #input_ident {
-            #(#type_outputs)*
             #(#method_outputs)*
         }
 
@@ -270,7 +232,6 @@ fn parse_traitenum_model(input: &syn::DeriveInput, enumtrait: &model::EnumTrait)
     Ok(traitenum_build.build())
 }
 
-const IDENT_ITERATOR: &'static str = "Iterator";
 const IDENT_BOXED_ITERATOR: &'static str = "BoxedIterator";
 
 // Creates iterator structs and implementations for dynamically dispatched many-to-many relations

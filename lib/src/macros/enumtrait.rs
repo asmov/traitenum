@@ -51,29 +51,24 @@ pub(crate) fn parse_enumtrait_macro(
     }
 
     let mut methods: Vec<model::Method> = Vec::new(); 
-    let mut partial_types: Vec<model::AssociatedTypePartial> = Vec::new();
 
-    // We only support trait methods and trait types. Everything else is either ignored or denied
+    // We only support trait methods. Everything else is either ignored or denied
     for trait_item in &trait_input.items {
         match trait_item {
             // Build a model Method
             syn::TraitItem::Fn(func) => parse_trait_fn(&mut methods, func)?,
-            // Partially build a model AssociatedType. We'll finalize with a second pass after the loop.
-            syn::TraitItem::Type(type_item) => parse_trait_type(&mut partial_types, type_item)?,
+            syn::TraitItem::Type(_) => synerr!("Associated types are not supported"),
             _ => ()
         }
     }
 
-    // These were partially constructed using parse_trait_type(). Now we finalize construction with a second pass.
-    // They will be used by the enum derive macro to build each traitenum's associated types. E.g., type Foo = Bar;
-    let types: Vec<model::AssociatedType> = build_associated_types(&mut partial_types, &methods)?;
 
     // Remove all #[tratienum] attributes from the TokenStream now that we're done parsing them
     clean_helper_attributes(&mut trait_input)?;
 
     Ok(EnumTraitMacroOutput {
         tokens: trait_input.to_token_stream(),
-        model: model::EnumTrait::new(identifier, methods, types)
+        model: model::EnumTrait::new(identifier, methods)
     })
 }
 
@@ -288,36 +283,6 @@ fn try_parse_trait_fn_return_boxed_trait_iterator(
 }
 
 
-fn parse_trait_type(
-    partial_types: &mut Vec<model::AssociatedTypePartial>,
-    type_item: &syn::TraitItemType) -> syn::Result<()>
-{
-    let type_identifier = model::Identifier::from(&type_item.ident);
-    if type_item.bounds.len() != 1 {
-        synerr!("Unsupported trait bounds for associated type: {}", type_identifier.name())
-    }
-
-    let trait_identifier = match type_item.bounds.first().unwrap() {
-        syn::TypeParamBound::Trait(trait_bound) => model::Identifier::try_from(&trait_bound.path).unwrap(),
-        syn::TypeParamBound::Lifetime(_) => 
-            synerr!("Unsupported trait bounds for associated type: {}", type_identifier.name()),
-        syn::TypeParamBound::Verbatim(_) => 
-            synerr!("Unsupported trait bounds for associated type: {}", type_identifier.name()),
-        _ =>
-            synerr!("Unsupported trait bounds for associated type: {}", type_identifier.name())
-    };
-
-    let partial_associated_type = model::AssociatedTypePartial{
-        name: type_identifier.name().to_owned(),
-        trait_identifier,
-        matched: false
-    };
-
-    partial_types.push(partial_associated_type);
-
-    Ok(())
-}
-
 fn clean_helper_attributes(trait_input: &mut syn::ItemTrait) -> syn::Result<()> {
     // strip out all #enumtrait helper attributes
     for trait_item in &mut trait_input.items {
@@ -347,50 +312,3 @@ fn clean_helper_attributes(trait_input: &mut syn::ItemTrait) -> syn::Result<()> 
     Ok(())
 }
 
-//TODO: remove
-fn build_associated_types(
-    partial_types: &mut Vec<model::AssociatedTypePartial>,
-    methods: &Vec<model::Method>) -> syn::Result<Vec<model::AssociatedType>>
-{
-    let mut types: Vec<model::AssociatedType> = Vec::new();
-
-    // match partially constructed associated types to statically dispatched relation methods and finalize
-    for method in methods {
-        let relation_def = match method.attribute_definition() {
-            model::AttributeDefinition::Relation(reldef) => reldef,
-            _ => continue
-        };
-
-        match relation_def.dispatch() {
-            Some(model::Dispatch::BoxedTrait) => continue,
-            Some(model::Dispatch::Other) => synerr!("Dispatch::Other is permanently unimplemented"),
-            None => unreachable!("Dispatch should be set by now")
-        }
-
-        let method_return_id = relation_def.identifier();
-        let partial_type_result = partial_types.iter_mut()
-            .filter(|t| !t.matched)
-            .find(|t| t.name == method_return_id.name());
-
-        let partial_type = match partial_type_result {
-            Some(t) => t,
-            None => synerr!("Unable to find a associated type for relationship definition: {}", method.name())
-        };
-
-        let associated_type = model::AssociatedType::new(
-            partial_type.name.to_owned(),
-            method.name().to_owned(),
-            partial_type.trait_identifier.to_owned(),
-            *relation_def.nature.as_ref().unwrap());
-
-        types.push(associated_type);
-        partial_type.matched = true;
-    }
-
-    // if there are remaining unmatched associated types, error out
-    if let Some(unmatched_type) = partial_types.iter().find(|t| !t.matched) {
-        synerr!("No matching relationship definition for associated type: {}", unmatched_type.name);
-    }
-
-    Ok(types)
-}

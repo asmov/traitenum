@@ -204,7 +204,7 @@ mod tests {
             unimplemented_static_dispatch_src).is_err(),
             "Dispatch::Other is permanently unimplemented and should throw an Error");
 
-        let unimplemented_implied_static_dispatch_src = quote::quote!{
+        let associated_types_src = quote::quote!{
             pub trait MyTrait {
                 type ManyType: ManyTrait;
 
@@ -214,7 +214,7 @@ mod tests {
 
         assert!(enumtrait::parse_enumtrait_macro(
             simple_attribute_src.clone(),
-            unimplemented_implied_static_dispatch_src).is_err(),
-            "Implied static dispatch is not supported and should throw an Error");
+            associated_types_src).is_err(),
+            "Associated types are not supported");
     }
 }

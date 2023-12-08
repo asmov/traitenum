@@ -9,9 +9,6 @@ Version 1
 - Support crate::paths aside from the root crate path
   + lib / macro
   + cargo
-- Remove static dispatch code
-  - Remove associated types
-  - Restrict use of associated types
 - One-to-One relationships
 - Implement a common TraitEnum trait for each enum, including:
   + type StaticIterator: Iterator<Item = Self>

@@ -9,13 +9,11 @@ pub mod parse;
 pub struct EnumTrait {
     identifier: Identifier,
     methods: Vec<Method>,
-    types: Vec<AssociatedType>
 }
 
 impl EnumTrait {
     pub fn identifier(&self) -> &Identifier { &self.identifier }
     pub fn methods(&self) -> &[Method] { &self.methods }
-    pub fn types(&self) -> &[AssociatedType] { &self.types }
     
     pub fn relation_methods(&self) -> Vec<(&Method, &RelationAttributeDefinition)> {
         self.methods.iter()
@@ -28,11 +26,10 @@ impl EnumTrait {
             .collect()
     }
 
-    pub const fn new(identifier: Identifier, methods: Vec<Method>, types: Vec<AssociatedType>) -> Self {
+    pub const fn new(identifier: Identifier, methods: Vec<Method>) -> Self {
         Self {
             identifier,
             methods,
-            types: types
         }
     }
 }
@@ -78,46 +75,6 @@ impl Display for Identifier {
         write!(f, "{}", path.join("::"))
     }
 }
-
-pub(crate) struct AssociatedTypePartial {
-    pub(crate) name: String,
-    pub(crate) trait_identifier: Identifier,
-    pub(crate) matched: bool
-}
-
-#[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize)]
-pub struct AssociatedType {
-    name: String,
-    relation_name: String,
-    trait_identifier: Identifier,
-    nature: RelationNature
-}
-
-impl AssociatedType {
-    pub fn name(&self) -> &str { &self.name }
-    pub fn relation_name(&self) -> &str { &self.relation_name }
-    pub fn trait_identifier(&self) -> &Identifier { &self.trait_identifier }
-    pub fn nature(&self) -> RelationNature { self.nature }
-
-    pub fn valid_return_type_id(identifier: &Identifier) -> bool {
-        identifier.path.len() == 1 && identifier.path[1] == "Self"
-    }
-
-    pub const fn new(
-        name: String,
-        relation_name: String,
-        trait_identifier: Identifier,
-        nature: RelationNature) -> Self
-    {
-        Self {
-            name,
-            relation_name: relation_name,
-            trait_identifier,
-            nature
-        }
-    }
-}
-
 
 #[derive(Copy, Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum ReturnType {
