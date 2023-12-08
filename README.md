@@ -4,15 +4,26 @@ A Rust library for using fieldless enums as schema definitions.
 
 In short, a trait is declared with a configurable set of const properties,   using attributes for each method. An enum is then derived for that trait, with each variant filling in property values via attributes.
 
-Relations between traits / enums can be defined as OneToOne, OneToMany, and ManyToOne.
+Relations (`Rel`) between traits / enums can be defined with a `nature` of:
+- `OneToOne`  - Points to to a single variant of another enum
+- `OneToMany` - Provides an iterator over another enum's variants
+- `ManyToOne` -Points to a single variant of another enum
 
 Properties support defaults and presets. Supported primitive types include:
-- Str (static)
-- Num (usize, i64, f32, etc.)
-- Enum
-- Bool
+- `Str` (static)
+- `Num` (usize, i64, f32, etc.)
+- `Enum`
+- `Bool`
 
-Default methods for traits can be used to extend functionality.
+Default implementations for trait methods can be used to extend functionality.
+
+Each method signature must properly correspond with its attribute. On the other hand, attributes can be elided from method signatures, both partially or completely. `Num`, for example, uses the method signature to determine what specific type of primitive to support (f64, u8, etc.).
+
+Presets set a default value for a property in a pre-determined way:
+- `Str` converts the variant name (snake case, kebab case, etc.)
+- `Num` converts the ordinal of the variant (offset, increment, etc.)
+
+Both default and preset values can be overridden by each enum variant.
 
 Example
 -------
