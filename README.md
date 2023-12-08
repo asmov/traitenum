@@ -17,7 +17,7 @@ Supported types include:
 
 Default implementations for trait methods can be used to extend functionality.
 
-Each method signature must properly correspond with its attribute. On the other hand, attributes can be elided from method signatures, both partially or completely. `Num`, for example, uses the method signature to determine what specific type of primitive to support (f64, u8, etc.).
+Each method signature must properly correspond with its attribute. On the other hand, attributes can be elided from method signatures, either partially or completely. `Num`, for example, uses the method signature to determine what specific type of primitive to support (f64, u8, etc.).
 
 Properties support defaults and presets.
 
