@@ -1,6 +1,6 @@
 use traitenum::{self, enumtrait};
 
-#[traitenum::enumtrait(crate::SimpleTrait)]
+#[traitenum::enumtrait]
 pub trait SimpleTrait {
     #[enumtrait::Str(default("spunko"))]
     fn name(&self) -> &'static str;
@@ -11,7 +11,7 @@ pub trait SimpleTrait {
     }
 }
 
-#[enumtrait(crate::ParentTrait)]
+#[enumtrait]
 pub trait ParentTrait {
     #[enumtrait::Str(preset(Variant))]
     fn name(&self) -> &'static str;
@@ -20,7 +20,7 @@ pub trait ParentTrait {
     fn children(&self) -> Box<dyn Iterator<Item = Box<dyn ChildTrait>>>;
 }
 
-#[enumtrait(crate::ChildTrait)]
+#[enumtrait]
 pub trait ChildTrait {
     #[enumtrait::Str(preset(Variant))]
     fn topic(&self) -> &'static str;
