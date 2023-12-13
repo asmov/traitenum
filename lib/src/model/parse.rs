@@ -3,15 +3,20 @@ use quote::{self, TokenStreamExt, ToTokens};
 use syn::{self, parse};
 use anyhow::{self, bail};
 
-use crate::{model, error::Errors, synerr, mksynerr, span, ERROR_PREFIX};
+use crate::{model, error::Errors, span};
 
 impl parse::Parse for model::Identifier {
     fn parse(input: parse::ParseStream) -> syn::Result<Self> {
-        let path: syn::Path = input.parse().map_err(|_| syn::Error::new(proc_macro2::Span::call_site(),
-            "Unable to parse trait #enumtrait(<absolute trait path>)"))?;
-        Self::try_from(&path)
-            .or_else(|_| synerr!("Unable to parse Identifier from Path: {}",
-                path.to_token_stream().to_string()))
+        let path: syn::Path = input.parse().map_err(|e| {
+            syn::Error::new(span!(), format!("Unable to parse path. {}", e.to_string()))
+        })?;
+
+        Self::try_from(&path).map_err(|e| {
+            syn::Error::new(span!(), format!(
+                "Unable to parse an identifier from path `{}`. {}",
+                path.to_token_stream().to_string(),
+                e.to_string()))
+        })
     }
 }
 
@@ -96,19 +101,19 @@ pub(crate) fn parse_attribute_definition(
         let content;
         syn::parenthesized!(content in meta.input);
 
-        match definition_name.as_str() {
+        let result = match definition_name.as_str() {
             model::BoolAttributeDefinition::DEFINITION_NAME =>  
-                parse_bool_attribute_definition(&mut def, &name, content, return_type)?,
+                parse_bool_attribute_definition(&mut def, &name, content, return_type),
             model::StaticStrAttributeDefinition::DEFINITION_NAME => 
-                parse_string_attribute_definition(&mut def, &name, content, return_type)?,
+                parse_string_attribute_definition(&mut def, &name, content, return_type),
             model::NumberAttributeDefinition::<usize>::DEFINITION_NAME => 
-                parse_number_attribute_definition(&mut def, &name, content, return_type)?,
+                parse_number_attribute_definition(&mut def, &name, content, return_type),
             model::FieldlessEnumAttributeDefinition::DEFINITION_NAME =>
-                parse_enum_attribute_definition(&mut def, &name, content, return_type)?,
+                parse_enum_attribute_definition(&mut def, &name, content, return_type),
             model::RelationAttributeDefinition::DEFINITION_NAME =>
-                parse_relation_attribute_definition(&mut def, &name, content, return_type)?,
-             _ => synerr!("Unknown attribute definition: {}", definition_name)
-
+                parse_relation_attribute_definition(&mut def, &name, content, return_type),
+             _ => Err(Errors::IllegalParsing(
+                    format!("Unknown attribute definition: {}", definition_name), attr.to_token_stream().to_string())).into()
         };
 
         Ok(())
@@ -128,7 +133,7 @@ fn parse_bool_attribute_definition(
         def: &mut model::AttributeDefinition,
         name: &str,
         content: syn::parse::ParseBuffer,
-        _return_type: model::ReturnType) -> Result<(), syn::Error> {
+        _return_type: model::ReturnType) -> anyhow::Result<()> {
     let booldef = match def {
         model::AttributeDefinition::Bool(def) => def,
         _ => synerr!("Incorrect attribute definition for return type for property: {}", name)
@@ -148,7 +153,7 @@ fn parse_enum_attribute_definition(
         def: &mut model::AttributeDefinition,
         name: &str,
         content: syn::parse::ParseBuffer,
-        _return_type: model::ReturnType) -> Result<(), syn::Error> {
+        _return_type: model::ReturnType) -> anyhow::Result<()> {
     let enumdef = match def {
         model::AttributeDefinition::FieldlessEnum(def) => def,
         _ => synerr!("Mismatched definition for Enum: {}", name)
@@ -169,7 +174,7 @@ fn parse_string_attribute_definition(
         def: &mut model::AttributeDefinition,
         name: &str,
         content: syn::parse::ParseBuffer,
-        _return_type: model::ReturnType) -> Result<(), syn::Error> {
+        _return_type: model::ReturnType) -> anyhow::Result<()> {
     let strdef = match def {
         model::AttributeDefinition::StaticStr(def) => def,
         _ => synerr!("Mismatched definition for Str: {}", name)
@@ -198,7 +203,7 @@ fn parse_relation_attribute_definition(
         def: &mut model::AttributeDefinition,
         name: &str,
         content: syn::parse::ParseBuffer,
-        _return_type: model::ReturnType) -> syn::Result<()>
+        _return_type: model::ReturnType) -> anyhow::Result<()>
 {
     let reldef = def.get_relation_definition_mut();
 
@@ -225,7 +230,7 @@ fn parse_number_attribute_definition(
         def: &mut model::AttributeDefinition,
         name: &str,
         content: syn::parse::ParseBuffer,
-        return_type: model::ReturnType) -> Result<(), syn::Error>
+        return_type: model::ReturnType) -> anyhow::Result<()>
 {
     match def {
         model::AttributeDefinition::UnsignedSize(def) => parse_number_definition(def, name, content, return_type, false),
@@ -247,7 +252,7 @@ fn parse_number_definition<N>(
         name: &str,
         content: syn::parse::ParseBuffer,
         _return_type: model::ReturnType,
-        is_float: bool) -> Result<(), syn::Error>
+        is_float: bool) -> anyhow::Result<()>
 where
     N: FromStr,
     N::Err: std::fmt::Display
@@ -288,7 +293,7 @@ where
 }
 
 pub(crate) fn parse_variant(variant_name: &str, attr: &syn::Attribute, model: &model::EnumTrait)
-        -> Result<model::VariantBuilder, syn::Error> {
+        -> anyhow::Result<model::VariantBuilder> {
     let mut variant_build = model::VariantBuilder::new();
     variant_build.name(variant_name.to_owned());
     attr.parse_nested_meta(|meta| {

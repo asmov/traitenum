@@ -1,11 +1,12 @@
 use quote::{self, ToTokens};
 use syn;
 use proc_macro2;
+use anyhow::{self, bail};
 
 use crate::{
-    model, model::parse,
-    synerr, mksynerr, span,
-    ERROR_PREFIX, ENUM_ATTRIBUTE_HELPER_NAME};
+    model, model::parse, error::Errors,
+    span,
+    ENUM_ATTRIBUTE_HELPER_NAME};
 
 #[derive(Debug)]
 pub(crate) struct TraitEnumMacroOutput {
@@ -15,16 +16,20 @@ pub(crate) struct TraitEnumMacroOutput {
 
 pub fn traitenum_derive_macro(
     item: proc_macro2::TokenStream,
-    model_bytes: &[u8]) -> Result<proc_macro2::TokenStream, syn::Error>
+    model_bytes: &[u8]) -> syn::Result<proc_macro2::TokenStream>
 {
-    let TraitEnumMacroOutput { tokens, model: _model } = parse_traitenum_macro(item, model_bytes)?;
+    let TraitEnumMacroOutput { tokens, model: _model } = match parse_traitenum_macro(item, model_bytes) {
+        Ok(output) => output,
+        Err(e) => return Err(syn::Error::new(span!(), e.to_string()))
+    };
+
     Ok(tokens)
 }
  
 pub(crate) fn parse_traitenum_macro(
     item: proc_macro2::TokenStream,
     enumtrait_model_bytes: &[u8]
-) -> Result<TraitEnumMacroOutput, syn::Error> {
+) -> anyhow::Result<TraitEnumMacroOutput> {
     let enumtrait = model::EnumTrait::deserialize(enumtrait_model_bytes).unwrap();
     let trait_ident = syn::Ident::new(enumtrait.identifier().name(), span!());
     let input: syn::DeriveInput = syn::parse2(item)?;
@@ -120,42 +125,62 @@ pub(crate) fn parse_traitenum_macro(
     })
 }
 
-fn data_enum(input: &syn::DeriveInput) -> Result<&syn::DataEnum, syn::Error> {
+fn data_enum(input: &syn::DeriveInput) -> anyhow::Result<&syn::DataEnum> {
     match input.data {
         syn::Data::Enum(ref data_enum) => Ok(data_enum),
-        _ => synerr!("Only enums are supported for #[{}]", ENUM_ATTRIBUTE_HELPER_NAME)
+        _ => bail!(Errors::UnsupportedParsing("#[traitenum] item other than `enum`".to_owned(), input.ident.to_string()))
     }
 }
 
-fn parse_traitenum_model(input: &syn::DeriveInput, enumtrait: &model::EnumTrait)
-        -> Result<model::TraitEnum, syn::Error> {
+fn parse_traitenum_model(
+    input: &syn::DeriveInput,
+    enumtrait: &model::EnumTrait
+) -> anyhow::Result<model::TraitEnum> {
     let mut traitenum_build = model::TraitEnumBuilder::new();
     traitenum_build.identifier(model::Identifier::from(&input.ident));
 
     //parse top-level attributes (item.attr) as relations -> #[traitenum(<relation name>(<trait path>))]
     for attr in &input.attrs {
-        attr.parse_nested_meta(|meta| {
+        // capture the error since the below function uses syn::Error
+        let mut meta_error: Option<Errors> = None;
+
+        let result = attr.parse_nested_meta(|meta| {
             // this will be the method and relation name as well
-            let attr_name = meta.path.get_ident()
-                .ok_or(mksynerr!("Invalid traitenum attribute. It is not an ident token: `{}`",
-                    meta.path.to_token_stream().to_string()))?
-                .to_string();
+            let attr_name = if let Some(ident) = meta.path.get_ident() { ident.to_string() } else {
+                meta_error = Some(Errors::UnexpectedParsing(
+                    format!("Ident, but found `{}`", meta.path.to_token_stream().to_string()),
+                    attr.to_token_stream().to_string()));
+                return Err(meta.error("error"));
+            };
 
             // prevent duplicates
             if traitenum_build.has_relation_enum(&attr_name) {
-                synerr!("Duplicate traitenum attribute for enum: {}", attr_name);
+                meta_error = Some(Errors::IllegalParsing(
+                    format!("Duplicate property: {}", attr_name),
+                    attr.to_token_stream().to_string()));
+                return Err(meta.error("error"));
             }
 
             // find the matching trait method by name
             let attribute_definition = enumtrait.methods().iter()
                 .find(|m| { m.name() == attr_name })
-                .ok_or_else(|| mksynerr!("No matching trait method for enum attribute: {}", attr_name))?
+                .ok_or_else(|| {
+                    meta_error = Some(Errors::IllegalParsing(
+                        format!("No matching method found for property `{}`", attr_name),
+                        attr.to_token_stream().to_string()));
+                    meta.error("error")
+                })?
                 .attribute_definition();
 
             // ensure that we're using a relation attribute definition for this method
             match attribute_definition {
                 model::AttributeDefinition::Relation(_) => (),
-                _ => synerr!("Trait method definition is not a Relation as expected for enum attribute: {}", attr_name)
+                _ => {
+                    meta_error = Some(Errors::IllegalParsing(
+                        format!("Definition type for property `{}` is not a Relation (`Rel`) as expected.", attr_name),
+                        attr.to_token_stream().to_string()));
+                    return Err(meta.error("error"));
+                }
             }
 
             let content;
@@ -164,9 +189,16 @@ fn parse_traitenum_model(input: &syn::DeriveInput, enumtrait: &model::EnumTrait)
             traitenum_build.relation_enum(attr_name, relation_path.try_into().unwrap());
 
             Ok(())
-        })?;
-    }
+        });
 
+        if result.is_err() {
+            if meta_error.is_some() {
+                bail!(meta_error.unwrap());
+            } else {
+                bail!(result.unwrap_err())
+            }
+        }
+    }
 
     // parse enum attribute values, if provided
     let data_enum = data_enum(input)?;
@@ -195,7 +227,9 @@ fn parse_traitenum_model(input: &syn::DeriveInput, enumtrait: &model::EnumTrait)
             } else if !definition.needs_value() {
                 continue;
             } else if !definition.has_default_or_preset() {
-                synerr!("Missing value for attribute `{}`: {}", method_name, variant_name);
+                bail!(Errors::IllegalParsing(
+                    format!("Variant `{}` is missing a value for property `{}`", variant_name, method_name),
+                    variant.to_token_stream().to_string()));
             } else {
                 let value = definition.default_or_preset(&variant_name, ordinal).unwrap();
                 variant_build.value(method_name.to_string(), model::AttributeValue::new(value));
@@ -237,8 +271,8 @@ const IDENT_BOXED_ITERATOR: &'static str = "BoxedIterator";
 // Creates iterator structs and implementations for dynamically dispatched many-to-many relations
 fn build_boxed_trait_relation_iterators(
     enumtrait: &model::EnumTrait,
-    traitenum: &model::TraitEnum) -> syn::Result<Vec<proc_macro2::TokenStream>>
-{
+    traitenum: &model::TraitEnum
+) -> anyhow::Result<Vec<proc_macro2::TokenStream>> {
     let structs = enumtrait.relation_methods().iter()
         .filter(|(_, rel)| rel.dispatch().unwrap() == model::Dispatch::BoxedTrait)
         .filter(|(_, rel)| rel.nature().unwrap() == model::RelationNature::ManyToOne)

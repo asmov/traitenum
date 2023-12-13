@@ -17,9 +17,12 @@ pub enum Errors {
     /// "Unimplemented parsing of: {0} :: {1}"
     #[error("Parsing is unimplemented for: {0} :: {1}")]
     UnimplementedParsing(String, String),
-    // "Unexpected tokens found when parsing. Expected: {0} :: {1}"
+    /// "Unexpected tokens found when parsing. Expected: {0} :: {1}"
     #[error("Unexpected tokens found when parsing. Expected: {0} :: {1}")]
     UnexpectedParsing(String, String),
+    /// "Improper usage found when parsing. {0} :: {1}"
+    #[error("Improper usage found when parsing. {0} :: {1}")]
+    IllegalParsing(String, String),
     #[error("Invalid definition for method `{0}`. {1} :: {2}")]
     InvalidDefinition(String, String, String),
     /// "Unable to parse path. {0} :: {1}"
