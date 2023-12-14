@@ -447,6 +447,24 @@ impl AttributeDefinition {
         }
     }
 
+    pub fn type_name(&self) -> &'static str {
+        match self {
+            AttributeDefinition::Bool(_) => BoolAttributeDefinition::DEFINITION_NAME,
+            AttributeDefinition::StaticStr(_) => StaticStrAttributeDefinition::DEFINITION_NAME,
+            AttributeDefinition::FieldlessEnum(_) => FieldlessEnumAttributeDefinition::DEFINITION_NAME,
+            AttributeDefinition::Relation(_) => RelationAttributeDefinition::DEFINITION_NAME,
+            AttributeDefinition::Type(_) => unimplemented!("Type definition is permanently unimplemented"),
+            AttributeDefinition::UnsignedSize(_) | 
+            AttributeDefinition::UnsignedInteger64(_) |
+            AttributeDefinition::Integer64(_) |
+            AttributeDefinition::Float64(_) |
+            AttributeDefinition::UnsignedInteger32(_) |
+            AttributeDefinition::Integer32(_) |
+            AttributeDefinition::Float32(_) |
+            AttributeDefinition::Byte(_) => NumberAttributeDefinition::<usize>::DEFINITION_NAME,
+        }
+    }
+
     pub fn needs_value(&self) -> bool {
         match self {
             AttributeDefinition::Relation(ref reldef) => match &reldef.nature {
