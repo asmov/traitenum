@@ -750,7 +750,7 @@ impl FromStr for RelationNature {
 pub enum Dispatch {
     /// Box<dyn Trait> and Box<dyn Iterator<Item = Box<dyn Trait>>>
     BoxedTrait,
-    /// This is a placeholder to future-proof expansion
+    /// This is a placeholder for future-proofing and should never be used.
     Other
 }
 
