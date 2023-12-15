@@ -217,19 +217,28 @@ fn parse_trait_fn_return(func: &syn::TraitItemFn) -> anyhow::Result<(model::Retu
 
 fn parse_box_trait_bound(path: &syn::Path) -> anyhow::Result<&syn::TraitBound> {
     if path.segments[0].ident != IDENT_BOX {
-        bail!(Errors::UnexpectedParsing("Box<...>".to_owned(), path.to_token_stream().to_string()));
+        bail!(Errors::UnexpectedParsing{
+            expected: "Box<...>".to_owned(),
+            found: path.segments[0].ident.to_string(),
+            tokens: path.to_token_stream().to_string()});
     }
 
     // -> Box< dyn Trait >
     //       ^~~~~~~~~~~~^
     let bracket_args = match &path.segments[0].arguments {
         syn::PathArguments::AngleBracketed(v) => v,
-        _ => bail!(Errors::UnexpectedParsing("Box<...>".to_owned(), path.to_token_stream().to_string()))
+        _ => bail!(Errors::UnexpectedParsing{
+            expected: "Box<...>".to_owned(),
+            found: path.segments[0].arguments.to_token_stream().to_string(),
+            tokens: path.to_token_stream().to_string()})
     };
 
     let arg_type = match &bracket_args.args[0] {
         syn::GenericArgument::Type(v) => v,
-        _ => bail!(Errors::UnexpectedParsing("Box<...>".to_owned(), path.to_token_stream().to_string()))
+        _ => bail!(Errors::UnexpectedParsing{
+            expected: "Box<...>".to_owned(),
+            found: bracket_args.args[0].to_token_stream().to_string(),
+            tokens: path.to_token_stream().to_string()})
     };
 
     // -> Box< dyn Trait >

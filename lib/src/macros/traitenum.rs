@@ -141,21 +141,22 @@ fn parse_traitenum_model(
 
     //parse top-level attributes (item.attr) as relations -> #[traitenum(<relation name>(<trait path>))]
     for attr in &input.attrs {
-        // capture the error since the below function uses syn::Error
         let mut meta_error: Option<Errors> = None;
-
         let result = attr.parse_nested_meta(|meta| {
             // this will be the method and relation name as well
-            let attr_name = if let Some(ident) = meta.path.get_ident() { ident.to_string() } else {
-                meta_error = Some(Errors::UnexpectedParsing(
-                    format!("Ident, but found `{}`", meta.path.to_token_stream().to_string()),
-                    attr.to_token_stream().to_string()));
-                return Err(meta.error("error"));
-            };
+            let attr_name = meta.path.get_ident()
+                .ok_or_else(|| {
+                    meta_error = Some(Errors::UnexpectedParsing{
+                        expected: "Setting name".to_owned(),
+                        found: meta.path.to_token_stream().to_string(),
+                        tokens: attr.to_token_stream().to_string()});
+                    meta.error("error")
+                })?
+                .to_string();
 
             // prevent duplicates
             if traitenum_build.has_relation_enum(&attr_name) {
-                meta_error = Some(Errors::IllegalParsing(
+                meta_error = Some(Errors::DuplicateParsing(
                     format!("Duplicate property: {}", attr_name),
                     attr.to_token_stream().to_string()));
                 return Err(meta.error("error"));

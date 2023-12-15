@@ -226,14 +226,20 @@ fn parse_relation_attribute_definition(
     match name {
         DEFINITION_NATURE => {
             let variant_name = content.parse::<syn::Ident>()?.to_string();
-            let relationship = model::RelationNature::from_str(&variant_name)
-                .or_else(|_| Err(mksynerr!("Unknown relationship: {}", variant_name)))?;
-            reldef.nature = Some(relationship);
+            let nature = model::RelationNature::from_str(&variant_name)
+                .or_else(|_| bail!(Errors::InvalidDefinitionSettingValue{
+                    def_type: def.type_name().to_owned(),
+                    setting: DEFINITION_NATURE.to_owned(),
+                    value: variant_name}))?;
+            reldef.nature = Some(nature);
         },
         DEFINITION_DISPATCH => {
             let variant_name = content.parse::<syn::Ident>()?.to_string();
             let dispatch = model::Dispatch::from_str(&variant_name)
-                .or(Err(mksynerr!("Unknown dispatch: {}", variant_name)))?;
+                .or_else(|_| bail!(Errors::InvalidDefinitionSettingValue{
+                    def_type: def.type_name().to_owned(),
+                    setting: DEFINITION_DISPATCH.to_owned(),
+                    value: variant_name}))?;
             reldef.dispatch = Some(dispatch);
         },
        _ => bail!(Errors::UnknownDefinitionSettingName{def_type: def.type_name().to_owned(), name: name.to_owned()})
@@ -292,7 +298,7 @@ where
        DEFINITION_PRESET => {
             let variant_name = content.parse::<syn::Ident>()?.to_string();
             let preset = model::NumberPreset::from_str(&variant_name)
-                .or_else(|_| Err(Errors::UnknownDefinitionPresetName {def_type: def.type_name().to_owned(), name: variant_name}))?;
+                .or_else(|_| bail!(Errors::UnknownDefinitionPresetName {def_type: def.type_name().to_owned(), name: variant_name}))?;
             numdef.preset = Some(preset);
        },
        DEFINITION_START => {
@@ -309,17 +315,32 @@ where
     Ok(())
 }
 
-pub(crate) fn parse_variant(variant_name: &str, attr: &syn::Attribute, model: &model::EnumTrait)
-        -> anyhow::Result<model::VariantBuilder> {
+pub(crate) fn parse_variant(
+    variant_name: &str,
+    attr: &syn::Attribute,
+    model: &model::EnumTrait
+) -> anyhow::Result<model::VariantBuilder> {
     let mut variant_build = model::VariantBuilder::new();
     variant_build.name(variant_name.to_owned());
+
+    let mut meta_error: Option<Errors> = None;
     attr.parse_nested_meta(|meta| {
         let attr_name = meta.path.get_ident()
-            .ok_or(mksynerr!("Invalid enum attribute: `{}`", meta.path.to_token_stream().to_string()))?
+            .ok_or_else(|| {
+                meta_error = Some(Errors::UnexpectedParsing{
+                    expected: "Variant setting name".to_owned(),
+                    found: meta.path.to_token_stream().to_string(),
+                    tokens: attr.to_token_stream().to_string()});
+                meta.error("error")
+            })?
             .to_string();
 
         if variant_build.has_value(&attr_name) {
-            synerr!("Duplicate enum attribute value for: {}", attr_name);
+            meta_error = Some(Errors::DuplicateParsing(
+                "Variant setting".to_owned(),
+                attr_name,
+                attr.to_token_stream().to_string()));
+            return Err(meta.error("error"));
         }
 
         let method = model.methods().iter().find(|m| m.name() == attr_name)
