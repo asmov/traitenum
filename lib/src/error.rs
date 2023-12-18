@@ -21,9 +21,9 @@ pub enum Errors {
     #[error("Parsing is unimplemented for: {0} :: {1}")]
     UnimplementedParsing(String, String),
 
-    /// "Unexpected tokens found when parsing. Expected: {expected}. Found: {found} :: {tokens}"
-    #[error("Unexpected tokens found when parsing. Expected: {expected}. Found: {found} :: {tokens}")]
-    UnexpectedParsing{expected: String, found: String, tokens: String},
+    /// "Unexpected tokens found when parsing. Expected: {0} :: {1}"
+    #[error("Unexpected tokens found when parsing. Expected: {0} :: {1}")]
+    UnexpectedParsing(String, String),
 
     /// "Improper usage found when parsing. {0} :: {1}"
     #[error("Improper usage found when parsing. {0} :: {1}")]
@@ -36,10 +36,6 @@ pub enum Errors {
     /// "Unable to parse path. {0} :: {1}"
     #[error("Unable to parse path. {0} :: {1}")]
     PathParsing(String, String),
-
-    /// "Duplicate entry found when parsing {subject}: {entry} :: {tokens}"
-    #[error("Duplicate entry found when parsing {subject}: {entry} :: {tokens}")]
-    DuplicateParsing{subject: String, entry: String, tokens: String},
 
     /// "Unable to parse definition for method `{0}`. {1} :: {2}"
     #[error("Unable to parse definition for method `{0}`. {1} :: {2}")]
