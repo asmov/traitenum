@@ -6,8 +6,8 @@ use anyhow::{self, bail};
 
 use crate::{
     model, macros, model::parse, error::Errors,
-    span,
-    TRAIT_ATTRIBUTE_HELPER_NAME, ENUM_ATTRIBUTE_HELPER_NAME };
+    synerr, mksynerr,
+    ERROR_PREFIX, TRAIT_ATTRIBUTE_HELPER_NAME, ENUM_ATTRIBUTE_HELPER_NAME };
 
 const IDENT_BOX: &'static str = "Box";
 const IDENT_ITERATOR: &'static str = "Iterator";
@@ -23,10 +23,10 @@ pub(crate) struct EnumTraitMacroOutput {
 pub fn enumtrait_macro(
     attr: proc_macro2::TokenStream,
     item: proc_macro2::TokenStream
-) -> syn::Result<proc_macro2::TokenStream> {
+) -> Result<proc_macro2::TokenStream, syn::Error> {
     let EnumTraitMacroOutput {tokens, model} = match parse_enumtrait_macro(attr, item) {
         Ok(output) => output,
-        Err(e) => return Err(syn::Error::new(span!(), e.to_string()))
+        Err(e) => synerr!(e.to_string())
     };
 
     let model_name = syn::Ident::new(
@@ -48,8 +48,8 @@ pub fn enumtrait_macro(
 
 pub(crate) fn parse_enumtrait_macro(
     attr: proc_macro2::TokenStream,
-    item: proc_macro2::TokenStream
-) -> anyhow::Result<EnumTraitMacroOutput> {
+    item: proc_macro2::TokenStream) -> anyhow::Result<EnumTraitMacroOutput>
+{
     if !attr.is_empty() {
         bail!(Errors::IllegalTopLevelArguments(attr.to_string()));
     }
@@ -252,8 +252,8 @@ fn parse_box_trait_bound(path: &syn::Path) -> anyhow::Result<&syn::TraitBound> {
 }
 
 fn try_parse_trait_fn_return_boxed(
-    type_path: &syn::TypePath
-) -> anyhow::Result<Option<(model::ReturnType, model::Identifier)>> {
+    type_path: &syn::TypePath) -> anyhow::Result<Option<(model::ReturnType, model::Identifier)>>
+{
     if type_path.path.segments[0].ident != IDENT_BOX {
         return Ok(None)
     }
@@ -269,46 +269,44 @@ fn try_parse_trait_fn_return_boxed(
 }
 
 fn try_parse_trait_fn_return_boxed_trait_iterator(
-    trait_bound: &syn::TraitBound
-) -> anyhow::Result<Option<(model::ReturnType, model::Identifier)>> {
+    trait_bound: &syn::TraitBound) -> anyhow::Result<Option<(model::ReturnType, model::Identifier)>>
+{
     // -> Box<dyn Iterator<Item = Box<dyn Trait>>>
     //                    ^~~~~~~~~~~~~~~~~~~~~~^ 
     let bracket_args = match &trait_bound.path.segments[0].arguments {
         syn::PathArguments::AngleBracketed(v) => v,
-        _ => bail!(Errors::UnsupportedParsing("Box<dyn Iterator>".to_owned(), trait_bound.to_token_stream().to_string())),
+        _ => synerr!("Invalid use of Box<dyn Iterator>: {}", trait_bound.to_token_stream())
     };
 
     let assoc_type = match &bracket_args.args[0] {
         syn::GenericArgument::AssocType(v) => v,
-        _ => bail!(Errors::UnsupportedParsing("Box<dyn Iterator>".to_owned(), trait_bound.to_token_stream().to_string())),
+        _ => synerr!("Invalid use of Box<dyn Iterator>: {}", trait_bound.to_token_stream())
     };
 
     if assoc_type.ident != IDENT_ITEM {
-        bail!(Errors::UnsupportedParsing("Box<dyn Iterator>".to_owned(), trait_bound.to_token_stream().to_string()));
+        synerr!("Invalid use of Box<dyn Iterator>: {}", trait_bound.to_token_stream())
     }
 
     // -> Box<dyn Iterator<Item = Box<dyn Trait>>>
     //                            ^~~~~~~~~~~~~^
     let item_trait_path = match assoc_type.ty {
         syn::Type::Path(ref v) => &v.path,
-        _ => bail!(Errors::UnsupportedParsing("Box<dyn Iterator>".to_owned(), trait_bound.to_token_stream().to_string())),
+        _ => synerr!("Invalid use of Box<dyn Iterator>: {}", trait_bound.to_token_stream())
     };
 
     let item_box_trait_bound = parse_box_trait_bound(item_trait_path)?;
     
     let id = model::Identifier::try_from(&item_box_trait_bound.path)
-        .map_err(|e| {
-            Errors::IllegalParsing(
-                format!("Unable to parse boxed trait iterator identifier `{}`: {}",
-                    item_box_trait_bound.path.to_token_stream(), e.to_string()),
-                trait_bound.to_token_stream().to_string())
+        .map_err(|_| {
+            mksynerr!("Unable to parse Boxed trait iterator identifier: {}",
+                item_box_trait_bound.path.to_token_stream())
         })?;
 
     Ok(Some((model::ReturnType::BoxedTraitIterator, id)))
 }
 
 
-fn clean_helper_attributes(trait_input: &mut syn::ItemTrait) -> anyhow::Result<()> {
+fn clean_helper_attributes(trait_input: &mut syn::ItemTrait) -> syn::Result<()> {
     // strip out all #enumtrait helper attributes
     for trait_item in &mut trait_input.items {
         match trait_item {
@@ -326,10 +324,7 @@ fn clean_helper_attributes(trait_input: &mut syn::ItemTrait) -> anyhow::Result<(
 
                 // we only process one attribute helper per method. curtail expectations with an error.
                 if count > 1 {
-                    bail!(Errors::IllegalParsing(
-                        format!("Multiple #[traitenum] attributes found for method `{}`", func.sig.ident.to_string()),
-                        func.to_token_stream().to_string()
-                    ));
+                    synerr!("Only one #traitenum helper attribute per method is supported");
                 }
             
             },
