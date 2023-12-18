@@ -64,7 +64,8 @@ pub(crate) fn parse_enumtrait_macro(
         match trait_item {
             // Build a model Method
             syn::TraitItem::Fn(func) => parse_trait_fn(&mut methods, func)?,
-            syn::TraitItem::Type(assoc) => bail!(error::EnumTrait::UnsupportedAssociatedType(assoc.ident.to_string())),
+        //anyhow::bail!(error::EnumTrait::UnsupportedAssociatedType, assoc.ident)
+            syn::TraitItem::Type(_) => synerr!("Associated types are not supported"),
             _ => ()
         }
     }
@@ -79,7 +80,7 @@ pub(crate) fn parse_enumtrait_macro(
     })
 }
 
-fn parse_trait_fn(methods: &mut Vec<model::Method>, func: &syn::TraitItemFn) -> anyhow::Result<()> {
+fn parse_trait_fn(methods: &mut Vec<model::Method>, func: &syn::TraitItemFn) -> syn::Result<()> {
     // ignore functions with default implementations
     if func.default.is_some() {
         return Ok(());
@@ -96,7 +97,9 @@ fn parse_trait_fn(methods: &mut Vec<model::Method>, func: &syn::TraitItemFn) -> 
 
     // 2. throw the error
     if attrib.is_some() {
-        bail!(error::EnumTrait::MismatchedHelperAttribute(func.sig.to_token_stream().to_string()));
+        //bail!(error::EnumTrait::MismatchedHelper, assoc.ident);
+        synerr!("Wrong attribute helper was used for trait: `#[{}]`. Please use for `#[{}]` traits.",
+            ENUM_ATTRIBUTE_HELPER_NAME, TRAIT_ATTRIBUTE_HELPER_NAME);
     }
 
     // We expect a helper attribute that defines each trait method.
@@ -109,25 +112,16 @@ fn parse_trait_fn(methods: &mut Vec<model::Method>, func: &syn::TraitItemFn) -> 
 
     // Parse the attribute definition that is found. If not found, attempt to build a default based on method signature.
     let attribute_def = if let Some(attrib) = attrib {
-        let def = parse::parse_attribute_definition(attrib, &method_name, return_type, return_type_identifier)?;
-
-        // Now perform a validation pass on all attribute definitions to enforce each def's specific rules
-        if let Err(e) = def.validate() {
-            bail!(error::EnumTrait::InvalidDefinition(method_name, e.to_string(), attrib.to_token_stream().to_string()));
-        }
-
-        def
+        parse::parse_attribute_definition(attrib, return_type, return_type_identifier)?
     } else {
-        let def = model::AttributeDefinition::partial(None, return_type, return_type_identifier)
-            .map_err(|msg| error::EnumTrait::MethodReturnTypeParsing(method_name, msg, return_type.to_string()))?;
-
-        // Now perform a validation pass on all attribute definitions to enforce each def's specific rules
-        if let Err(e) = def.validate() {
-            bail!(error::EnumTrait::InvalidDefinition(method_name, e.to_string(), func.sig.to_token_stream().to_string()));
-        }
-
-        def
+        model::AttributeDefinition::partial(None, return_type, return_type_identifier)
+            .map_err(|e| mksynerr!("Unable to parse definition from return signature for `{}` :: {}", method_name, e))?
     };
+
+    // Now perform a validation pass on all attribute definitions to enforce each def's specific rules
+    if let Err(errmsg) = attribute_def.validate() {
+        synerr!(errmsg);
+    }
 
     let method = model::Method::new(method_name, return_type, attribute_def);
     methods.push(method);

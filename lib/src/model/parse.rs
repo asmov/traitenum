@@ -1,9 +1,8 @@
 use std::str::FromStr;
 use quote::{self, TokenStreamExt, ToTokens};
 use syn::{self, parse};
-use anyhow::{self, bail};
 
-use crate::{model, error, synerr, mksynerr, span, ERROR_PREFIX};
+use crate::{model, synerr, mksynerr, span, ERROR_PREFIX, TRAIT_ATTRIBUTE_HELPER_NAME};
 
 impl parse::Parse for model::Identifier {
     fn parse(input: parse::ParseStream) -> syn::Result<Self> {
@@ -63,38 +62,32 @@ impl TryFrom<&syn::Path> for model::ReturnType {
 
 pub(crate) fn parse_attribute_definition(
         attr: &syn::Attribute,
-        method_name: &str,
         return_type: model::ReturnType,
         return_type_id: Option<model::Identifier>
-) -> anyhow::Result<model::AttributeDefinition> {
-    // should be in the format of enumtrait::DefinitionName
+    ) -> Result<model::AttributeDefinition, syn::Error> {
     if attr.path().segments.len() != 2 {
-        bail!(error::Model::DefinitionParsing(
-            method_name.to_string(),
-            "Usage is `#[enumtrait::DefinitionType(...)]`. E.g: `#[enumtrait::Str()]`".to_string(),
-            attr.path().to_token_stream().to_string()));
+        synerr!("Unable to parse helper attribute: `{}`. Format: {}::DefinitionName",
+            TRAIT_ATTRIBUTE_HELPER_NAME,
+            attr.path().to_token_stream().to_string())
     }
 
-    let definition_name = attr.path().segments.last().unwrap() // safe
-        .ident.to_string();
+    let definition_name = attr.path().segments.last()
+        .ok_or(mksynerr!("Empty helper attribute definition name. Format: {}::DefinitionName",
+            TRAIT_ATTRIBUTE_HELPER_NAME))?.ident.to_string();
 
     let mut def = model::AttributeDefinition::partial(Some(&definition_name), return_type, return_type_id)
-        .map_err(|msg| error::Model::DefinitionParsing(method_name.to_string(), msg, attr.to_token_stream().to_string()))?;
+        .map_err(|e| mksynerr!("Unable to parse return type for definition `{}` :: {}",
+            attr.path().to_token_stream().to_string(), e))?;
 
-    // the parse function uses syn:Error, so our own errors have to be saved rather than unwrapped
-    let mut parse_meta_err = None;
-    let result = attr.parse_nested_meta(|meta| {
-        let name = if let Some(ident) = meta.path.get_ident() { ident.to_string() } else {
-            parse_meta_err = Some(error::Model::DefinitionParsing(
-                method_name.to_string(),
-                format!("Unknown definition property: {}", meta.path.to_token_stream().to_string()),
-                attr.to_token_stream().to_string()));
-            return Err(meta.error("error"));
-        };
+    attr.parse_nested_meta(|meta| {
+        let name = meta.path.get_ident()
+            .ok_or(mksynerr!("Unknown definition property: `{}`",
+                meta.path.to_token_stream().to_string()))?
+            .to_string();
 
         let content;
         syn::parenthesized!(content in meta.input);
-stoppingpoint; //TODO: the following methods need to return our own errors 
+
         match definition_name.as_str() {
             model::BoolAttributeDefinition::DEFINITION_NAME =>  
                 parse_bool_attribute_definition(&mut def, &name, content, return_type)?,
@@ -111,11 +104,7 @@ stoppingpoint; //TODO: the following methods need to return our own errors
         };
 
         Ok(())
-    });
-
-    if result.is_err() {
-        bail!(parse_meta_err.unwrap());
-    }
+    })?;
 
     Ok(def)
 }

@@ -1,9 +1,7 @@
 use std::{fmt::Display, str::FromStr, collections::HashMap, collections::hash_map};
+
 use serde;
 use convert_case::{self as case, Casing};
-use anyhow::{self, bail};
-
-use crate::error;
 
 pub mod parse;
 
@@ -154,10 +152,6 @@ impl FromStr for ReturnType {
     }
 }
 
-pub trait DefinitionValidator {
-    fn validate(&self) -> anyhow::Result<()>;
-}
-
 #[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum AttributeDefinition {
     Bool(BoolAttributeDefinition),
@@ -176,11 +170,9 @@ pub enum AttributeDefinition {
 }
 
 impl AttributeDefinition {
-    pub fn partial(
-        definition_name: Option<&str>,
-        return_type: ReturnType,
-        return_identifier: Option<Identifier>
-    ) -> Result<Self, String> {
+    pub fn partial(definition_name: Option<&str>, return_type: ReturnType, return_identifier: Option<Identifier>)
+            -> Result<Self, String> {
+
         macro_rules! chk_defname {
             ($expected:path) => {
                if let Some(defname) = definition_name {
@@ -462,14 +454,14 @@ impl AttributeDefinition {
     }
 
     /// Ensures that this definition is valid based return type, presets, etc.
-    pub fn validate(&self) -> anyhow::Result<()> {
+    pub fn validate(&self) -> Result<(), &str> {
         if self.has_default() && self.has_preset() {
-            bail!(error::Model::DefinitionValidator("Both a `default()` and a `preset()` have been set. Only one can be used at a time.".to_string()));
+            return Err("Both a default and a preset have been set");
         }
 
         match self {
-            AttributeDefinition::Bool(booldef) => booldef.validate(),
-            AttributeDefinition::StaticStr(strdef) => strdef.validate(),
+            AttributeDefinition::Bool(_booldef) => Ok(()),
+            AttributeDefinition::StaticStr(_strdef) => Ok(()),
             AttributeDefinition::UnsignedSize(numdef) => numdef.validate(),
             AttributeDefinition::UnsignedInteger64(numdef) => numdef.validate(),
             AttributeDefinition::Integer64(numdef) => numdef.validate(),
@@ -512,10 +504,8 @@ impl BoolAttributeDefinition {
             default: None
         }
     }
-}
 
-impl DefinitionValidator for BoolAttributeDefinition {
-    fn validate(&self) -> anyhow::Result<()> {
+    pub fn validate(&self) -> Result<(), &str> {
         Ok(())
     }
 }
@@ -539,18 +529,16 @@ impl<N> NumberAttributeDefinition<N> {
             increment: None
         }
     }
-}
-
-impl<N> DefinitionValidator for NumberAttributeDefinition<N> {
-    fn validate(&self) -> anyhow::Result<()> {
+    
+    pub fn validate(&self) -> Result<(), &str> {
         let preset = match &self.preset { Some(p) => p, None => return Ok(()) };
         match preset {
             NumberPreset::Ordinal => Ok(()),
             NumberPreset::Serial => {
                 if self.start.is_none() {
-                    bail!(error::Model::DefinitionValidator("Missing attribute for `Serial` number preset: start()".to_string()))
+                    Err("Missing attribute for `Serial` number preset: start")
                 } else if self.increment.is_none() {
-                    bail!(error::Model::DefinitionValidator("Missing attribute for `Serial` number preset: increment()".to_string()))
+                    Err("Missing attribute for `Serial` number preset: increment")
                 } else {
                     Ok(())
                 }
@@ -665,12 +653,6 @@ impl StaticStrAttributeDefinition {
     }
 }
 
-impl DefinitionValidator for StaticStrAttributeDefinition {
-    fn validate(&self) -> anyhow::Result<()> {
-        Ok(())
-    }
-}
-
 #[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct FieldlessEnumAttributeDefinition {
     identifier: Identifier,
@@ -686,10 +668,8 @@ impl FieldlessEnumAttributeDefinition {
             default: None
         }
     }
-}
 
-impl DefinitionValidator for FieldlessEnumAttributeDefinition {
-    fn validate(&self) -> anyhow::Result<()> {
+    pub fn validate(&self) -> Result<(), &str> {
         Ok(())
     }
 }
@@ -771,19 +751,17 @@ impl RelationAttributeDefinition {
             dispatch: None
         }
     }
-}
 
-impl DefinitionValidator for RelationAttributeDefinition {
-    fn validate(&self) -> anyhow::Result<()> {
+    pub fn validate(&self) -> Result<(), &str> {
         match self.dispatch{
             Some(Dispatch::BoxedTrait) => {},
-            Some(Dispatch::Other) => bail!(error::Model::DefinitionValidator("Dispatch::Other is permanently unimplemented".to_string())),
-            None => bail!(error::Model::DefinitionValidator("Missing property for Rel definition: nature()".to_string()))
+            Some(Dispatch::Other) => return Err("Dispatch::Other is permanently unimplemented"),
+            None => return Err("Missing property for Rel definition: nature")
         }
 
         match self.nature {
             Some(_) => {},
-            None => bail!(error::Model::DefinitionValidator("Missing property for Rel definition: nature()".to_string()))
+            None => return Err("Missing property for Rel definition: nature")
         }
 
         Ok(())
