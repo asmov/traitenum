@@ -6,9 +6,9 @@ Version 1
 
 ### todo!()
 
-- Support crate::paths aside from the root crate path
-  + lib / macro
-  + cargo
+- Derive macro gen shouldn't require a function name input
+- Cargo adddon: Don't hardcode example trait on workspace new/init, use lib
+- Cargo addon integration tests
 - One-to-One relationships
 - Implement a common TraitEnum trait for each enum, including:
   + type StaticIterator: Iterator<Item = Self>
@@ -17,6 +17,7 @@ Version 1
   + variant_name(&self) -> &'static str :: Str(preset(Variant))
   + from_variant_name(&str) -> Option<Self>
 - Document, Refactor, Test
+  - Make errors more helpful to end-users. Include tips 
   + lib / macro
   + cargo
 - Make proc-macro errors more helpful to end-users, including tips

@@ -7,7 +7,7 @@ mod tests {
     
     #[test]
     fn attribute_model() {
-        #[enumtrait(crate::tests::MyTrait)]
+        #[enumtrait()]
         pub trait MyTrait {
             // test default parsing
             fn name(&self) -> &'static str;

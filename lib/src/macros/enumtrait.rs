@@ -43,12 +43,12 @@ pub(crate) fn parse_enumtrait_macro(
     attr: proc_macro2::TokenStream,
     item: proc_macro2::TokenStream) -> syn::Result<EnumTraitMacroOutput>
 {
-    let identifier: model::Identifier = syn::parse2(attr)?;
-    let mut trait_input: syn::ItemTrait = syn::parse2(item)?;
-
-    if identifier.name() != trait_input.ident.to_string() {
-        synerr!("Trait name does not match #enumtrait(<absolute trait path>): {}", identifier.name());
+    if !attr.is_empty() {
+        synerr!("Top-level #[enumtrait] does not accept arguments: {}", attr.to_string());
     }
+
+    let mut trait_input: syn::ItemTrait = syn::parse2(item)?;
+    let identifier = model::Identifier::new(vec![], trait_input.ident.to_string());
 
     let mut methods: Vec<model::Method> = Vec::new(); 
 
