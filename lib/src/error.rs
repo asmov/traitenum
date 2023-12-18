@@ -39,7 +39,7 @@ pub enum Errors {
 
     /// "Duplicate entry found when parsing {subject}: {entry} :: {tokens}"
     #[error("Duplicate entry found when parsing {subject}: {entry} :: {tokens}")]
-    DuplicateParsing{subject: String, entry: String, tokens: String},
+    DuplicateParsing{ subject: String, entry: String, tokens: String },
 
     /// "Unable to parse definition for method `{0}`. {1} :: {2}"
     #[error("Unable to parse definition for method `{0}`. {1} :: {2}")]
@@ -47,7 +47,7 @@ pub enum Errors {
 
     /// "Unknown `{def_type}` definition setting `{setting}` for method `{method}` :: {tokens}"
     #[error("Unknown `{def_type}` definition setting `{setting}` for method `{method}` :: {tokens}")]
-    UnknownDefinitionSetting{method: String, def_type: String, setting: String, tokens: String},
+    UnknownDefinitionSetting{ method: String, def_type: String, setting: String, tokens: String },
 
     /// "Unknown `{def_type}` definition setting `{name}`"
     #[error("Unknown `{def_type}` definition setting `{name}`")]
@@ -72,6 +72,12 @@ pub enum Errors {
     /// "Invalid `{def_type}` definition setting `{setting}()` value for method `{method}`: {value}` :: {tokens}"
     #[error("Invalid `{def_type}` definition setting `{setting}()` value for method `{method}`: {value}` :: {tokens}")]
     InvalidDefinitionSetting{ method: String, def_type: String, setting: String, value: String, tokens: String },
+
+    /// Generic parsing error meant to wrap syn::Error for definition parsing.
+    /// 
+    /// "Unable to parse {setting} of {def_type} definition for method `{method_name}`. {cause} :: {tokens}" 
+    #[error("Unable to parse {setting} of {def_type} definition for method `{method_name}`. {cause} :: {tokens}")]
+    DefinitionSynParsing { setting: String, def_type: String, method_name: String, cause: String, tokens: String },
 
     /// "{0}"
     #[error("{0}")]
