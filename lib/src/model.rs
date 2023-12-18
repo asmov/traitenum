@@ -3,7 +3,7 @@ use serde;
 use convert_case::{self as case, Casing};
 use anyhow::{self, bail};
 
-use crate::error::Errors;
+use crate::error;
 
 pub mod parse;
 
@@ -464,7 +464,7 @@ impl AttributeDefinition {
     /// Ensures that this definition is valid based return type, presets, etc.
     pub fn validate(&self) -> anyhow::Result<()> {
         if self.has_default() && self.has_preset() {
-            bail!(Errors::DefinitionValidator("Both a `default()` and a `preset()` have been set. Only one can be used at a time.".to_string()));
+            bail!(error::Model::DefinitionValidator("Both a `default()` and a `preset()` have been set. Only one can be used at a time.".to_string()));
         }
 
         match self {
@@ -548,9 +548,9 @@ impl<N> DefinitionValidator for NumberAttributeDefinition<N> {
             NumberPreset::Ordinal => Ok(()),
             NumberPreset::Serial => {
                 if self.start.is_none() {
-                    bail!(Errors::DefinitionValidator("Missing attribute for `Serial` number preset: start()".to_string()))
+                    bail!(error::Model::DefinitionValidator("Missing attribute for `Serial` number preset: start()".to_string()))
                 } else if self.increment.is_none() {
-                    bail!(Errors::DefinitionValidator("Missing attribute for `Serial` number preset: increment()".to_string()))
+                    bail!(error::Model::DefinitionValidator("Missing attribute for `Serial` number preset: increment()".to_string()))
                 } else {
                     Ok(())
                 }
@@ -777,13 +777,13 @@ impl DefinitionValidator for RelationAttributeDefinition {
     fn validate(&self) -> anyhow::Result<()> {
         match self.dispatch{
             Some(Dispatch::BoxedTrait) => {},
-            Some(Dispatch::Other) => bail!(Errors::DefinitionValidator("Dispatch::Other is permanently unimplemented".to_string())),
-            None => bail!(Errors::DefinitionValidator("Missing property for Rel definition: nature()".to_string()))
+            Some(Dispatch::Other) => bail!(error::Model::DefinitionValidator("Dispatch::Other is permanently unimplemented".to_string())),
+            None => bail!(error::Model::DefinitionValidator("Missing property for Rel definition: nature()".to_string()))
         }
 
         match self.nature {
             Some(_) => {},
-            None => bail!(Errors::DefinitionValidator("Missing property for Rel definition: nature()".to_string()))
+            None => bail!(error::Model::DefinitionValidator("Missing property for Rel definition: nature()".to_string()))
         }
 
         Ok(())

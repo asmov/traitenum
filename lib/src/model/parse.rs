@@ -3,7 +3,7 @@ use quote::{self, TokenStreamExt, ToTokens};
 use syn::{self, parse};
 use anyhow::{self, bail};
 
-use crate::{model, error::Errors, synerr, mksynerr, span, ERROR_PREFIX};
+use crate::{model, error, synerr, mksynerr, span, ERROR_PREFIX};
 
 impl parse::Parse for model::Identifier {
     fn parse(input: parse::ParseStream) -> syn::Result<Self> {
@@ -22,7 +22,7 @@ impl From<&syn::Ident> for model::Identifier{
 }
 
 impl TryFrom<&syn::Path> for model::Identifier {
-    type Error = Errors; 
+    type Error = &'static str;
 
     fn try_from(path: &syn::Path) -> Result<Self, Self::Error> {
         Self::try_from(path.clone())
@@ -30,7 +30,7 @@ impl TryFrom<&syn::Path> for model::Identifier {
 }
 
 impl TryFrom<syn::Path> for model::Identifier{
-    type Error = Errors;
+    type Error = &'static str;
 
     fn try_from(mut path: syn::Path) -> Result<Self, Self::Error> {
         let name = path.segments.pop().unwrap()
@@ -38,8 +38,7 @@ impl TryFrom<syn::Path> for model::Identifier{
         let path = path.segments.pairs()
             .map(|pair| {
                 if !pair.value().arguments.is_empty() {
-                    Err(Errors::PathParsing(
-                        "Path arguments are not supported".to_owned(), path.to_token_stream().to_string()).into())
+                    Err("Path contains arguments")
                 } else {
                     Ok(pair.value().ident.to_string())
                 }
@@ -70,7 +69,7 @@ pub(crate) fn parse_attribute_definition(
 ) -> anyhow::Result<model::AttributeDefinition> {
     // should be in the format of enumtrait::DefinitionName
     if attr.path().segments.len() != 2 {
-        bail!(Errors::DefinitionParsing(
+        bail!(error::Model::DefinitionParsing(
             method_name.to_string(),
             "Usage is `#[enumtrait::DefinitionType(...)]`. E.g: `#[enumtrait::Str()]`".to_string(),
             attr.path().to_token_stream().to_string()));
@@ -80,13 +79,13 @@ pub(crate) fn parse_attribute_definition(
         .ident.to_string();
 
     let mut def = model::AttributeDefinition::partial(Some(&definition_name), return_type, return_type_id)
-        .map_err(|msg| Errors::DefinitionParsing(method_name.to_string(), msg, attr.to_token_stream().to_string()))?;
+        .map_err(|msg| error::Model::DefinitionParsing(method_name.to_string(), msg, attr.to_token_stream().to_string()))?;
 
     // the parse function uses syn:Error, so our own errors have to be saved rather than unwrapped
     let mut parse_meta_err = None;
     let result = attr.parse_nested_meta(|meta| {
         let name = if let Some(ident) = meta.path.get_ident() { ident.to_string() } else {
-            parse_meta_err = Some(Errors::DefinitionParsing(
+            parse_meta_err = Some(error::Model::DefinitionParsing(
                 method_name.to_string(),
                 format!("Unknown definition property: {}", meta.path.to_token_stream().to_string()),
                 attr.to_token_stream().to_string()));
@@ -95,7 +94,7 @@ pub(crate) fn parse_attribute_definition(
 
         let content;
         syn::parenthesized!(content in meta.input);
-
+stoppingpoint; //TODO: the following methods need to return our own errors 
         match definition_name.as_str() {
             model::BoolAttributeDefinition::DEFINITION_NAME =>  
                 parse_bool_attribute_definition(&mut def, &name, content, return_type)?,

@@ -5,7 +5,7 @@ use convert_case::{self as case, Casing};
 use anyhow::{self, bail};
 
 use crate::{
-    model, macros, model::parse, error::Errors,
+    model, macros, model::parse, error,
     synerr, mksynerr,
     ERROR_PREFIX, TRAIT_ATTRIBUTE_HELPER_NAME, ENUM_ATTRIBUTE_HELPER_NAME };
 
@@ -51,7 +51,7 @@ pub(crate) fn parse_enumtrait_macro(
     item: proc_macro2::TokenStream) -> anyhow::Result<EnumTraitMacroOutput>
 {
     if !attr.is_empty() {
-        bail!(Errors::IllegalTopLevelArguments(attr.to_string()));
+        bail!(error::EnumTrait::IllegalTopLevelArguments(attr.to_string()));
     }
 
     let mut trait_input: syn::ItemTrait = syn::parse2(item)?;
@@ -64,7 +64,7 @@ pub(crate) fn parse_enumtrait_macro(
         match trait_item {
             // Build a model Method
             syn::TraitItem::Fn(func) => parse_trait_fn(&mut methods, func)?,
-            syn::TraitItem::Type(assoc) => bail!(Errors::UnsupportedAssociatedType(assoc.ident.to_string())),
+            syn::TraitItem::Type(assoc) => bail!(error::EnumTrait::UnsupportedAssociatedType(assoc.ident.to_string())),
             _ => ()
         }
     }
@@ -96,7 +96,7 @@ fn parse_trait_fn(methods: &mut Vec<model::Method>, func: &syn::TraitItemFn) -> 
 
     // 2. throw the error
     if attrib.is_some() {
-        bail!(Errors::MismatchedHelperAttribute(func.sig.to_token_stream().to_string()));
+        bail!(error::EnumTrait::MismatchedHelperAttribute(func.sig.to_token_stream().to_string()));
     }
 
     // We expect a helper attribute that defines each trait method.
@@ -113,17 +113,17 @@ fn parse_trait_fn(methods: &mut Vec<model::Method>, func: &syn::TraitItemFn) -> 
 
         // Now perform a validation pass on all attribute definitions to enforce each def's specific rules
         if let Err(e) = def.validate() {
-            bail!(Errors::InvalidDefinition(method_name, e.to_string(), attrib.to_token_stream().to_string()));
+            bail!(error::EnumTrait::InvalidDefinition(method_name, e.to_string(), attrib.to_token_stream().to_string()));
         }
 
         def
     } else {
         let def = model::AttributeDefinition::partial(None, return_type, return_type_identifier)
-            .map_err(|msg| Errors::MethodReturnTypeParsing(method_name.to_owned(), msg, return_type.to_string()))?;
+            .map_err(|msg| error::EnumTrait::MethodReturnTypeParsing(method_name, msg, return_type.to_string()))?;
 
         // Now perform a validation pass on all attribute definitions to enforce each def's specific rules
         if let Err(e) = def.validate() {
-            bail!(Errors::InvalidDefinition(method_name.to_owned(), e.to_string(), func.sig.to_token_stream().to_string()));
+            bail!(error::EnumTrait::InvalidDefinition(method_name, e.to_string(), func.sig.to_token_stream().to_string()));
         }
 
         def
@@ -135,13 +135,12 @@ fn parse_trait_fn(methods: &mut Vec<model::Method>, func: &syn::TraitItemFn) -> 
     Ok(())
 }
 
-fn parse_trait_fn_return(func: &syn::TraitItemFn) -> anyhow::Result<(model::ReturnType, Option<model::Identifier>)> {
+fn parse_trait_fn_return(func: &syn::TraitItemFn) -> syn::Result<(model::ReturnType, Option<model::Identifier>)> {
     let mut return_type: Option<model::ReturnType> = None;
     let mut return_type_identifier: Option<model::Identifier> = None;
 
     match &func.sig.output {
-        syn::ReturnType::Default => bail!(Errors::UnsupportedParsing(
-            "Default return type `()`".to_owned(), func.sig.output.to_token_stream().to_string())),
+        syn::ReturnType::Default => synerr!("Default return types () are not supported"),
         syn::ReturnType::Type(_, ref returntype) => match **returntype {
             syn::Type::Path(ref path_type) => {
                 if let Ok(ret_type) = model::ReturnType::try_from(&path_type.path) {
@@ -156,16 +155,16 @@ fn parse_trait_fn_return(func: &syn::TraitItemFn) -> anyhow::Result<(model::Retu
                     return_type = Some(model::ReturnType::AssociatedType);
                     return_type_identifier = match model::Identifier::try_from(&path_type.path) {
                         Ok(id) => Some(id),
-                        Err(_) => bail!(Errors::UnsupportedParsing(
-                            "Return type `{}`".to_owned(), path_type.path.to_token_stream().to_string()))
+                        Err(_) => synerr!("Unsupported return type: {}",
+                            &path_type.path.to_token_stream().to_string())
                     }
                 } else {
                     // Anything else is modeled as ReturnType::Type, including enums.
                     return_type = Some(model::ReturnType::Type);
                     return_type_identifier = match model::Identifier::try_from(&path_type.path) {
                         Ok(id) => Some(id),
-                        Err(_) => bail!(Errors::UnsupportedParsing(
-                            "Unsupported return type `{}`".to_owned(), path_type.path.to_token_stream().to_string()))
+                        Err(_) => synerr!("Unsupported return type: {}",
+                            &path_type.path.to_token_stream().to_string())
                     }
                 }
             },
@@ -177,9 +176,7 @@ fn parse_trait_fn_return(func: &syn::TraitItemFn) -> anyhow::Result<(model::Retu
                         if "static" == lifetime.ident.to_string() {
                             true
                         } else {
-                            bail!(Errors::UnsupportedParsing(
-                                "Explicit lifetime. Only elided and static lifetimes are supported for return types".to_owned(),
-                                ref_type.to_token_stream().to_string()))
+                            synerr!("Only elided and static lifetimes are supported for return types")
                         }
                     },
                     None => false
@@ -187,8 +184,7 @@ fn parse_trait_fn_return(func: &syn::TraitItemFn) -> anyhow::Result<(model::Retu
 
                 // mutability is not supported
                 if ref_type.mutability.is_some() {
-                    bail!(Errors::UnsupportedParsing(
-                        "Mutable return type".to_owned(), ref_type.to_token_stream().to_string()));
+                    synerr!("Mutable return types are not supported")
                 }
 
                 // basically just ensure that the ident is a "str"
@@ -202,12 +198,10 @@ fn parse_trait_fn_return(func: &syn::TraitItemFn) -> anyhow::Result<(model::Retu
 
                 // ... the else statement for each nested if statement above
                 if return_type.is_none() {
-                    bail!(Errors::UnsupportedParsing(
-                        "Reference return type".to_owned(), ref_type.to_token_stream().to_string()))
+                    synerr!("Unsupported return reference type: {}", ref_type.to_token_stream().to_string())
                 }
             },
-            _ => bail!(Errors::UnimplementedParsing(
-                "Trait return type".to_owned(), func.sig.output.to_token_stream().to_string())),
+            _ => synerr!("Unimplemented trait return type"),
         }
     }
 
@@ -215,44 +209,40 @@ fn parse_trait_fn_return(func: &syn::TraitItemFn) -> anyhow::Result<(model::Retu
     Ok((return_type, return_type_identifier))
 }
 
-fn parse_box_trait_bound(path: &syn::Path) -> anyhow::Result<&syn::TraitBound> {
+fn parse_box_trait_bound(path: &syn::Path) -> syn::Result<&syn::TraitBound> {
     if path.segments[0].ident != IDENT_BOX {
-        bail!(Errors::UnexpectedParsing("Box<...>".to_owned(), path.to_token_stream().to_string()));
+        synerr!("Expected a Box<>: {}", path.to_token_stream()) 
     }
 
     // -> Box< dyn Trait >
     //       ^~~~~~~~~~~~^
     let bracket_args = match &path.segments[0].arguments {
         syn::PathArguments::AngleBracketed(v) => v,
-        _ => bail!(Errors::UnexpectedParsing("Box<...>".to_owned(), path.to_token_stream().to_string()))
+        _ => synerr!("Invalid use of Box: {}", path.to_token_stream())
     };
 
     let arg_type = match &bracket_args.args[0] {
         syn::GenericArgument::Type(v) => v,
-        _ => bail!(Errors::UnexpectedParsing("Box<...>".to_owned(), path.to_token_stream().to_string()))
+        _ => synerr!("Invalid use of Box: {}", path.to_token_stream())
     };
 
     // -> Box< dyn Trait >
     //         ^~~~~~~~^
     let trait_obj = match arg_type {
         syn::Type::TraitObject(v) => v,
-        _ => bail!(Errors::UnsupportedParsing(
-                "Box<...>. Only `<dyn EnumTrait>` path arguments are supported.".to_owned(),
-                path.to_token_stream().to_string()))
+        _ => synerr!("Unsupported use of Box. Only <dyn EnumTrait> arguments allowed: {}", path.to_token_stream())
     };
 
     let trait_bound = match trait_obj.bounds[0] {
         syn::TypeParamBound::Trait(ref v) => v,
-        _ => bail!(Errors::UnsupportedParsing(
-                "Box<...>. Only `<dyn EnumTrait>` path arguments are supported.".to_owned(),
-                path.to_token_stream().to_string()))
+        _ => synerr!("Unsupported use of Box. Only <dyn EnumTrait> arguments allowed: {}", path.to_token_stream())
     };
 
     Ok(trait_bound)
 }
 
 fn try_parse_trait_fn_return_boxed(
-    type_path: &syn::TypePath) -> anyhow::Result<Option<(model::ReturnType, model::Identifier)>>
+    type_path: &syn::TypePath) -> syn::Result<Option<(model::ReturnType, model::Identifier)>>
 {
     if type_path.path.segments[0].ident != IDENT_BOX {
         return Ok(None)
@@ -263,13 +253,15 @@ fn try_parse_trait_fn_return_boxed(
     if trait_bound.path.segments[0].ident == IDENT_ITERATOR {
         try_parse_trait_fn_return_boxed_trait_iterator(trait_bound)
     } else {
-        let id = model::Identifier::try_from(&trait_bound.path)?;
+        let id = model::Identifier::try_from(&trait_bound.path)
+            .map_err(|_| mksynerr!("Unable to parse Boxed trait identifier: {}", trait_bound.path.to_token_stream()))?;
+
         Ok(Some((model::ReturnType::BoxedTrait, id)))
     }
 }
 
 fn try_parse_trait_fn_return_boxed_trait_iterator(
-    trait_bound: &syn::TraitBound) -> anyhow::Result<Option<(model::ReturnType, model::Identifier)>>
+    trait_bound: &syn::TraitBound) -> syn::Result<Option<(model::ReturnType, model::Identifier)>>
 {
     // -> Box<dyn Iterator<Item = Box<dyn Trait>>>
     //                    ^~~~~~~~~~~~~~~~~~~~~~^ 
