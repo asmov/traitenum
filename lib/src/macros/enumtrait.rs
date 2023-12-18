@@ -52,6 +52,10 @@ pub(crate) fn parse_enumtrait_macro(
 {
     if !attr.is_empty() {
         bail!(error::EnumTrait::IllegalTopLevelArguments(attr.to_string()));
+        //anyhow::bail!(error::EnumTrait::UnsupportedAssociatedType, assoc.ident)
+        //anyhow::bail!(error::EnumTrait::MismatchedHelper, assoc.ident)
+
+        //synerr!("Top-level #[enumtrait] does not accept arguments: {}", attr.to_string());
     }
 
     let mut trait_input: syn::ItemTrait = syn::parse2(item)?;
@@ -64,7 +68,6 @@ pub(crate) fn parse_enumtrait_macro(
         match trait_item {
             // Build a model Method
             syn::TraitItem::Fn(func) => parse_trait_fn(&mut methods, func)?,
-        //anyhow::bail!(error::EnumTrait::UnsupportedAssociatedType, assoc.ident)
             syn::TraitItem::Type(_) => synerr!("Associated types are not supported"),
             _ => ()
         }
@@ -97,7 +100,6 @@ fn parse_trait_fn(methods: &mut Vec<model::Method>, func: &syn::TraitItemFn) -> 
 
     // 2. throw the error
     if attrib.is_some() {
-        //bail!(error::EnumTrait::MismatchedHelper, assoc.ident);
         synerr!("Wrong attribute helper was used for trait: `#[{}]`. Please use for `#[{}]` traits.",
             ENUM_ATTRIBUTE_HELPER_NAME, TRAIT_ATTRIBUTE_HELPER_NAME);
     }
