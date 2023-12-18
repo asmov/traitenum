@@ -156,10 +156,9 @@ fn parse_traitenum_model(
 
             // prevent duplicates
             if traitenum_build.has_relation_enum(&attr_name) {
-                meta_error = Some(Errors::DuplicateParsing{
-                    subject: "Relation".to_owned(),
-                    entry: attr_name,
-                    tokens: attr.to_token_stream().to_string()});
+                meta_error = Some(Errors::DuplicateParsing(
+                    format!("Duplicate property: {}", attr_name),
+                    attr.to_token_stream().to_string()));
                 return Err(meta.error("error"));
             }
 

@@ -3,7 +3,7 @@ use quote::{self, TokenStreamExt, ToTokens};
 use syn::{self, parse};
 use anyhow::{self, bail};
 
-use crate::{model::{self, BoolAttributeDefinition}, error::Errors, span};
+use crate::{model, error::Errors, span};
 
 impl parse::Parse for model::Identifier {
     fn parse(input: parse::ParseStream) -> syn::Result<Self> {
@@ -88,30 +88,30 @@ pub(crate) fn parse_attribute_definition(
         .map_err(|msg| Errors::DefinitionParsing(method_name.to_string(), msg, attr.to_token_stream().to_string()))?;
 
     // the parse function uses syn:Error, so our own errors have to be saved rather than unwrapped
-    let mut parse_meta_err: Option<Errors> = None;
+    let mut parse_meta_err = None;
     let result = attr.parse_nested_meta(|meta| {
         let name = if let Some(ident) = meta.path.get_ident() { ident.to_string() } else {
             parse_meta_err = Some(Errors::DefinitionParsing(
                 method_name.to_string(),
                 format!("Unknown definition property: {}", meta.path.to_token_stream().to_string()),
-                attr.to_token_stream().to_string()).into());
+                attr.to_token_stream().to_string()));
             return Err(meta.error("error"));
         };
 
         let content;
         syn::parenthesized!(content in meta.input);
 
-        let parse_result = match definition_name.as_str() {
+        let result = match definition_name.as_str() {
             model::BoolAttributeDefinition::DEFINITION_NAME =>  
-                parse_bool_attribute_definition(&mut def, &name, content, return_type, method_name, attr),
+                parse_bool_attribute_definition(&mut def, &name, content, return_type),
             model::StaticStrAttributeDefinition::DEFINITION_NAME => 
-                parse_string_attribute_definition(&mut def, &name, content, return_type, method_name, attr),
+                parse_string_attribute_definition(&mut def, &name, content, return_type),
             model::NumberAttributeDefinition::<usize>::DEFINITION_NAME => 
-                parse_number_attribute_definition(&mut def, &name, content, return_type, method_name, attr),
+                parse_number_attribute_definition(&mut def, &name, content, return_type),
             model::FieldlessEnumAttributeDefinition::DEFINITION_NAME =>
-                parse_enum_attribute_definition(&mut def, &name, content, return_type, method_name, attr),
+                parse_enum_attribute_definition(&mut def, &name, content, return_type),
             model::RelationAttributeDefinition::DEFINITION_NAME =>
-                parse_relation_attribute_definition(&mut def, &name, content, return_type, method_name, attr),
+                parse_relation_attribute_definition(&mut def, &name, content, return_type),
              _ => {
                 Err(Errors::UnknownDefinitionType(
                     definition_name.to_owned(),
@@ -120,26 +120,19 @@ pub(crate) fn parse_attribute_definition(
             }
         };
 
-        if parse_result.is_err() {
-            parse_meta_err = Some(parse_result.unwrap_err());
-            Err(meta.error("error"))
-        } else {
-            Ok(())
-        }
+        Ok(())
     });
 
     if result.is_err() {
         // Expand on some of the errors to include the method name and token
         match parse_meta_err {
-            Some(e) => match e {
-                Errors::UnknownDefinitionSettingName{def_type, name} =>
-                    bail!(Errors::UnknownDefinitionSetting{
-                        method: method_name.to_owned(), def_type, setting: name, tokens: attr.to_token_stream().to_string()}),
-                Errors::InvalidDefinitionSettingValue{def_type, setting, value } =>
-                    bail!(Errors::UnknownDefinitionSetting{
-                        method: method_name.to_owned(), def_type, setting, tokens: attr.to_token_stream().to_string()}),
-                }*/
-            /*Some(e) => bail!(e),*/
+            Some(Errors::UnknownDefinitionSettingName{def_type, name}) =>
+                bail!(Errors::UnknownDefinitionSetting{
+                    method: method_name.to_owned(), def_type, setting: name, tokens: attr.to_token_stream().to_string()}),
+            Some(Errors::InvalidDefinitionSettingValue{def_type, setting, value }) =>
+                bail!(Errors::UnknownDefinitionSetting{
+                    method: method_name.to_owned(), def_type, setting, tokens: attr.to_token_stream().to_string()}),
+            Some(e) => bail!(e),
             None => bail!(result.unwrap_err())
         }
     }
@@ -154,10 +147,8 @@ fn parse_bool_attribute_definition(
         def: &mut model::AttributeDefinition,
         name: &str,
         content: syn::parse::ParseBuffer,
-        _return_type: model::ReturnType,
-        method_name: &str,
-        attr: &syn::Attribute
-    ) -> Result<(), Errors> {
+        _return_type: model::ReturnType
+    ) -> anyhow::Result<()> {
     let booldef = match def {
         model::AttributeDefinition::Bool(def) => def,
         _ => unreachable!("Mismatched definition for Bool: {}", name)
@@ -165,18 +156,9 @@ fn parse_bool_attribute_definition(
 
     match name {
        DEFINITION_DEFAULT => {
-            booldef.default = Some(content.parse::<syn::LitBool>()
-                .or_else(|e| {
-                    Errors::DefinitionSynParsing{
-                        setting: DEFINITION_DEFAULT.to_owned(),
-                        def_type: BoolAttributeDefinition::DEFINITION_NAME.to_owned(),
-                        method_name: method_name.to_owned(),
-                        cause: e.to_string(),
-                        tokens: attr.to_token_stream().to_string()
-                    }.into()
-                })?);
+            booldef.default = Some(content.parse::<syn::LitBool>()?.value())
        },
-       _ => return Err(Errors::UnknownDefinitionSettingName{def_type: def.type_name().to_owned(), name: name.to_owned()})
+       _ => bail!(Errors::UnknownDefinitionSettingName{def_type: def.type_name().to_owned(), name: name.to_owned()})
     }
 
     Ok(())
@@ -220,11 +202,8 @@ fn parse_string_attribute_definition(
        },
        DEFINITION_PRESET => {
             let variant_name = content.parse::<syn::Ident>()?.to_string();
-            let preset = model::StringPreset::from_str(&variant_name).or_else(|_| {
-                Err(Errors::UnknownDefinitionPresetName {
-                    def_type: def.type_name().to_owned(),
-                    name: variant_name.to_owned()})
-            })?;
+            let preset = model::StringPreset::from_str(&variant_name)
+                .or_else(|_| Err(Errors::UnknownDefinitionPresetName {def_type: def.type_name().to_owned(), name: variant_name}))?;
             strdef.preset = Some(preset);
        },
        _ => bail!(Errors::UnknownDefinitionSettingName{def_type: def.type_name().to_owned(), name: name.to_owned()})
@@ -357,19 +336,15 @@ pub(crate) fn parse_variant(
             .to_string();
 
         if variant_build.has_value(&attr_name) {
-            meta_error = Some(Errors::DuplicateParsing{
-                subject: "Variant setting".to_owned(),
-                entry: attr_name,
-                tokens: attr.to_token_stream().to_string()});
+            meta_error = Some(Errors::DuplicateParsing(
+                "Variant setting".to_owned(),
+                attr_name,
+                attr.to_token_stream().to_string()));
             return Err(meta.error("error"));
         }
 
-        let method = model.methods().iter().find(|m| m.name() == attr_name).ok_or_else(|| {
-            meta_error = Some(Errors::IllegalParsing(
-                format!("Unknown definition `{}`", attr_name),
-                attr.to_token_stream().to_string()));
-           meta.error("error")
-        })?;
+        let method = model.methods().iter().find(|m| m.name() == attr_name)
+            .ok_or(mksynerr!("Unknown enum attribute: {}", attr_name))?;
 
         let attribute_def = &method.attribute_definition();
 
