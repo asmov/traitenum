@@ -2,10 +2,9 @@ use quote::{self, ToTokens};
 use syn::{self, spanned::Spanned};
 use proc_macro2;
 use convert_case::{self as case, Casing};
-use anyhow::{self, bail};
 
 use crate::{
-    model, macros, model::parse, error,
+    model, macros, model::parse,
     synerr, mksynerr,
     ERROR_PREFIX, TRAIT_ATTRIBUTE_HELPER_NAME, ENUM_ATTRIBUTE_HELPER_NAME };
 
@@ -20,15 +19,9 @@ pub(crate) struct EnumTraitMacroOutput {
     pub(crate) model: model::EnumTrait
 }
 
-pub fn enumtrait_macro(
-    attr: proc_macro2::TokenStream,
-    item: proc_macro2::TokenStream
-) -> Result<proc_macro2::TokenStream, syn::Error> {
-    let EnumTraitMacroOutput {tokens, model} = match parse_enumtrait_macro(attr, item) {
-        Ok(output) => output,
-        Err(e) => synerr!(e.to_string())
-    };
-
+pub fn enumtrait_macro(attr: proc_macro2::TokenStream, item: proc_macro2::TokenStream)
+        -> Result<proc_macro2::TokenStream, syn::Error> {
+    let EnumTraitMacroOutput {tokens, model} = parse_enumtrait_macro(attr, item)?;
     let model_name = syn::Ident::new(
         &format!("{}{}", macros::MODEL_BYTES_NAME, model.identifier().name().to_case(case::Case::ScreamingSnake)),
         proc_macro2::Span::call_site());
@@ -48,18 +41,14 @@ pub fn enumtrait_macro(
 
 pub(crate) fn parse_enumtrait_macro(
     attr: proc_macro2::TokenStream,
-    item: proc_macro2::TokenStream) -> anyhow::Result<EnumTraitMacroOutput>
+    item: proc_macro2::TokenStream) -> syn::Result<EnumTraitMacroOutput>
 {
-    if !attr.is_empty() {
-        bail!(error::EnumTrait::IllegalTopLevelArguments(attr.to_string()));
-        //anyhow::bail!(error::EnumTrait::UnsupportedAssociatedType, assoc.ident)
-        //anyhow::bail!(error::EnumTrait::MismatchedHelper, assoc.ident)
-
-        //synerr!("Top-level #[enumtrait] does not accept arguments: {}", attr.to_string());
-    }
-
+    let identifier: model::Identifier = syn::parse2(attr)?;
     let mut trait_input: syn::ItemTrait = syn::parse2(item)?;
-    let identifier = model::Identifier::new(vec![], trait_input.ident.to_string());
+
+    if identifier.name() != trait_input.ident.to_string() {
+        synerr!("Trait name does not match #enumtrait(<absolute trait path>): {}", identifier.name());
+    }
 
     let mut methods: Vec<model::Method> = Vec::new(); 
 

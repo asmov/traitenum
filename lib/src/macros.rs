@@ -37,7 +37,9 @@ mod tests {
 
     #[test]
     fn test_parse_enumtrait_primitives() {
-        let attribute_src = quote::quote!{};
+        let attribute_src = quote::quote!{
+            crate::tests::MyTrait
+        };
 
         let item_src = quote::quote!{
             pub trait MyTrait {
@@ -75,7 +77,7 @@ mod tests {
         let model = enumtrait::parse_enumtrait_macro(attribute_src, item_src).unwrap().model;
         dbg!(&model);
 
-        assert!(model.identifier().path().is_empty());
+        assert_eq!(vec!["crate", "tests"], model.identifier().path());
         assert_eq!("MyTrait", model.identifier().name());
 
         let item_src = quote::quote!{
@@ -117,7 +119,9 @@ mod tests {
     
     #[test]
     fn test_parse_enumtrait_boxed_trait_relations() {
-        let attribute_src = quote::quote!{};
+        let attribute_src = quote::quote!{
+            crate::tests::MyTrait
+        };
 
         let item_src = quote::quote!{
             pub trait MyTrait {
@@ -140,6 +144,9 @@ mod tests {
         
         let model = enumtrait::parse_enumtrait_macro(attribute_src, item_src).unwrap().model;
         dbg!(&model);
+
+        assert_eq!(vec!["crate", "tests"], model.identifier().path());
+        assert_eq!("MyTrait", model.identifier().name());
 
         let item_src = quote::quote!{
             #[traitenum(many_to_one_dyn(ManyToOneEnum::Dyn))]
@@ -164,18 +171,19 @@ mod tests {
 
     #[test]
     fn test_parse_enumtrait_errors() {
-        let simple_attribute_src = quote::quote!{};
-
+        let simple_attribute_src = quote::quote!{
+            crate::tests::MyTrait
+        };
         let simple_item_src = quote::quote!{
             pub trait MyTrait {
                 fn name(&self) -> &'static str;
             }
         };
 
-        // test error: non-empty identifier
-        let attribute_src = quote::quote!{ crate::MyTrait };
+        // test error: empty identifier
+        let attribute_src = quote::quote!{};
         assert!(enumtrait::parse_enumtrait_macro(attribute_src, simple_item_src.clone()).is_err(),
-            "Non-empty #[{}(<pathspec>)] should throw an Error", TRAIT_ATTRIBUTE_HELPER_NAME);
+            "Empty #[{}(<pathspec>)] should throw an Error", TRAIT_ATTRIBUTE_HELPER_NAME);
         
         // test error: mismatched trait name with identifier
         let attribute_src = quote::quote!{ crate::tests::TheirTrait };

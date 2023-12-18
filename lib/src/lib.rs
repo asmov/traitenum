@@ -1,7 +1,6 @@
 pub mod gen;
 pub mod model;
 pub mod macros;
-pub mod error;
 
 pub(crate) const TRAIT_ATTRIBUTE_HELPER_NAME: &'static str = "enumtrait";
 pub(crate) const ENUM_ATTRIBUTE_HELPER_NAME: &'static str = "traitenum";
