@@ -3,7 +3,7 @@ use anyhow;
 
 use crate::{self as lib, cli, cmd, str};
 
-pub fn new_workspace(mut args: cli::NewWorkspaceCommand) -> anyhow::Result<()> {
+pub fn new_workspace(mut args: cli::NewWorkspaceCommand, quiet: bool) -> anyhow::Result<()> {
     // a common mistake is to specify a path instead of a name as the positional parameter, which we can't handle well
     if args.workspace_name.contains(path::MAIN_SEPARATOR) {
         anyhow::bail!(lib::Errors::InvalidArgument(
@@ -34,21 +34,23 @@ pub fn new_workspace(mut args: cli::NewWorkspaceCommand) -> anyhow::Result<()> {
         anyhow::bail!(lib::Errors::CargoManifestExists(workspace_path.to_owned()));
     }
 
-    lib::log("Creating workspace ...");
+    lib::log(quiet, "Creating workspace ...");
     make_workspace(&args)?;
-    lib::log("Creating lib package ...");
+    lib::log(quiet, "Creating lib package ...");
     super::make_lib(&args.library)?;
-    lib::log("Creating derive package ...");
+    lib::log(quiet, "Creating derive package ...");
     super::make_derive(&args.library)?;
-    lib::log("Configuring lib package ...");
+    lib::log(quiet, "Configuring lib package ...");
     super::config_lib(&args.library)?;
-    lib::log("Configuring derive package ...");
+    lib::log(quiet, "Configuring derive package ...");
     super::config_derive(&args.library)?;
-    lib::log("Building workspace ...");
+    lib::log(quiet, "Adding new enumtrait ...");
+    super::add_enumtrait(&args.library)?;
+    lib::log(quiet, "Building workspace ...");
     super::build_workspace(&args.library)?;
-    lib::log("Testing workspace ...");
+    lib::log(quiet, "Testing workspace ...");
     super::test_workspace(&args.library)?;
-    lib::log_success("Your traitenum workspace is ready.");
+    lib::log_success(quiet, "Your traitenum workspace is ready.");
 
     Ok(())
 }

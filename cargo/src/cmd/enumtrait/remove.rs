@@ -5,7 +5,7 @@ use quote::{self, ToTokens};
 use crate::{self as lib, cli, meta, str, cmd};
 
 
-pub fn remove_trait(args: cli::RemoveTraitCommand) -> anyhow::Result<()> {
+pub fn remove_trait(args: cli::RemoveTraitCommand, quiet: bool) -> anyhow::Result<()> {
     let dir = if let Some(ref workspace_path) = args.module.workspace_path {
         workspace_path.to_owned()
     } else {
@@ -30,12 +30,12 @@ pub fn remove_trait(args: cli::RemoveTraitCommand) -> anyhow::Result<()> {
     };
 
     // find the trait
-    let trait_meta = match library.traits().iter().find(|t| t.crate_path() == args.module.trait_crate_path) {
+    let trait_meta = match library.traits().iter().find(|t| t.name() == args.module.trait_name) {
         Some(v) => v,
-        None => anyhow::bail!(lib::Errors::UnknownTrait(args.module.trait_crate_path, library.name().to_owned()))
+        None => anyhow::bail!(lib::Errors::UnknownTrait(args.module.trait_name, library.name().to_owned()))
     };
 
-    lib::log("Removing trait from lib package ...");
+    lib::log(quiet, "Removing trait from lib package ...");
     rm_lib_trait(trait_meta, library, &workspace)?;
     /*lib::log("Removing trait from lib manifest ...");
     update_lib_manifest()?;
@@ -58,7 +58,7 @@ fn rm_lib_trait(
     library: &meta::LibraryMeta,
     workspace: &meta::WorkspaceMeta
 ) -> anyhow::Result<()> {
-    let trait_crate_path = trait_meta.crate_path();
+    let trait_name = trait_meta.name();
     let src_filepath = workspace.lib_path(library).join("src").join("lib.rs");
     let mut src = syn::parse_file(&fs::read_to_string(&src_filepath)?)?;
     
@@ -69,29 +69,21 @@ fn rm_lib_trait(
             // return None when it's found, Some(item) otherwise to retain that item 
             match item {
                 syn::Item::Trait(ref item_trait) => {
-                    // find the trait by its #[enumtrait(crate::Foo)] top-level attribute
-                    let search = item_trait.attrs.iter().find(|attr| {
-                        if !attr.path().is_ident(ENUMTRAIT_ATTR_IDENT) {
-                            return false;
-                        }
-
-                        // match by the crate path
-                        attr.parse_nested_meta(|meta| {
-                            if meta.path.to_token_stream().to_string().replace(" ", "") == trait_crate_path {
-                                found = true;
-                            }
-
-                            Ok(())
-                        }).unwrap();
-                        
-                        return found;
-
-                    });
-
-                    if search.is_some() {  // then exclude it
-                        None
-                    } else {
+                    // match against the trait ident by name
+                    if item_trait.ident.to_string() != trait_name {
                         Some(item)
+                    }
+                    // ensure that this trait has an #[enumtrait] attribute
+                    // if it doesn't, warn that there's a potential error
+                    else if item_trait.attrs.iter().find(|attr| attr.path().is_ident(ENUMTRAIT_ATTR_IDENT)).is_none() {
+                        lib::log_warn(&format!(
+                            "Trait `{}` found, but it does not have an `#[enumtrait]` attribute. Skipped",
+                            trait_name));
+
+                        Some(item) 
+                    } else {
+                        found = true;
+                        None
                     }
                 },
                 _ => Some(item)

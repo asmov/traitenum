@@ -10,16 +10,20 @@ pub mod cmd;
 #[macro_export]
 macro_rules! str { ($s:literal) => { String::from($s) }; }
 
-pub fn log(msg: &str) {
-    println!("{}{}", "[traitenum] ".cyan(), msg);
+pub fn log(quiet: bool, msg: &str) {
+    if !quiet {
+        println!("{}{}", "[traitenum] ".cyan(), msg);
+    }
 }
 
 pub fn log_warn(msg: &str) {
     eprintln!("{}{}", "[traitenum] ".yellow(), msg);
 }
 
-pub fn log_success(msg: &str) {
-    println!("{}{}", "[traitenum] ".green(), msg);
+pub fn log_success(quiet: bool, msg: &str) {
+    if !quiet {
+        println!("{}{}", "[traitenum] ".green(), msg);
+    }
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -69,13 +73,12 @@ pub enum Errors {
 pub fn run(cli: cli::Cli) -> anyhow::Result<()> {
     match cli.module {
         cli::CommandModules::Workspace(module) => match module.command {
-            cli::WorkspaceCommands::New(args) => cmd::new_workspace(args),
-            cli::WorkspaceCommands::Init(args) => cmd::init_workspace(args),
-            
+            cli::WorkspaceCommands::New(args) => cmd::new_workspace(args, cli.quiet),
+            cli::WorkspaceCommands::Init(args) => cmd::init_workspace(args, cli.quiet),
         },
         cli::CommandModules::Trait(module) => match module.command {
-            cli::TraitCommands::Add(args) => cmd::add_trait(args),
-            cli::TraitCommands::Remove(args) => cmd::remove_trait(args),
+            cli::TraitCommands::Add(args) => cmd::add_trait(args, cli.quiet, true),
+            cli::TraitCommands::Remove(args) => cmd::remove_trait(args, cli.quiet),
         }
     }
 }

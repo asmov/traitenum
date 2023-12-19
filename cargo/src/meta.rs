@@ -34,7 +34,7 @@ pub struct LibraryMeta {
 
 #[derive(Debug)]
 pub struct TraitMeta {
-    crate_path: String,
+    name: String,
 }
 
 impl WorkspaceMeta {
@@ -60,11 +60,7 @@ impl LibraryMeta {
 }
 
 impl TraitMeta {
-    pub fn crate_path(&self) -> &str { &self.crate_path }
-
-    pub fn name(&self) -> &str {
-        &self.crate_path.split("::").last().unwrap()
-    }
+    pub fn name(&self) -> &str { &self.name }
 }
 
 mod build {
@@ -150,21 +146,21 @@ mod build {
 
     #[derive(Debug)]
     pub struct TraitMeta {
-        crate_path: Option<String>
+        name: Option<String>
     }
 
     impl TraitMeta {
         pub fn new() -> Self {
             Self {
-                crate_path: None
+                name: None
             }
         }
 
-        pub fn crate_path(&mut self, crate_path: String) -> &mut Self { self.crate_path = Some(crate_path); self }
+        pub fn name(&mut self, name: String) -> &mut Self { self.name = Some(name); self }
 
         pub fn build(self) -> super::TraitMeta {
             super::TraitMeta {
-                crate_path: self.crate_path.unwrap()
+                name: self.name.unwrap()
             }
         }
     }
@@ -202,18 +198,19 @@ pub fn build(from_dir: &Path) -> anyhow::Result<WorkspaceMeta> {
         let manifest_filepath = &lib_path.join("Cargo.toml");
         let manifest = cmd::read_manifest(&manifest_filepath)?;
         let lib_name = toml_str("package.name", &manifest, "", &manifest_filepath)?.to_owned();
-        let traits_metadata = toml_array("package.metadata.traitenum.trait", &manifest, "", &manifest_filepath)?;
 
         let mut traits: Vec<build::TraitMeta> = Vec::new();
-        let mut i = 0;
-        for trait_metadata in traits_metadata {
-            let context = format!("package.metadata.traitenum.trait[{}]", i);
-            let crate_path = toml_str("crate-path", trait_metadata, &context, &manifest_filepath)?.to_owned();
+        if let Ok(traits_metadata) = toml_array("package.metadata.traitenum.trait", &manifest, "", &manifest_filepath) {
+            let mut i = 0;
+            for trait_metadata in traits_metadata {
+                let context = format!("package.metadata.traitenum.trait[{}]", i);
+                let trait_name = toml_str("name", trait_metadata, &context, &manifest_filepath)?.to_owned();
 
-            let mut trait_meta = build::TraitMeta::new();
-            trait_meta.crate_path(crate_path);
-            traits.push(trait_meta);
-            i += 0;
+                let mut trait_meta = build::TraitMeta::new();
+                trait_meta.name(trait_name);
+                traits.push(trait_meta);
+                i += 0;
+            }
         }
 
         let manifest_filepath = &derive_path.join("Cargo.toml");
@@ -244,6 +241,7 @@ pub(crate) fn toml_path<'toml>(
     Ok(value)
 }
 
+/*TODO: Remove this if not used
 pub(crate) fn toml_path_mut<'toml>(
     path: &str,
     toml: &'toml mut toml::Value,
@@ -256,7 +254,7 @@ pub(crate) fn toml_path_mut<'toml>(
     }
 
     Ok(value)
-}
+}*/
 
 pub(crate) fn toml_array<'toml>(
     path: &str,
@@ -272,6 +270,7 @@ pub(crate) fn toml_array<'toml>(
     Ok(array)
 }
 
+/*TODO
 pub(crate) fn toml_array_mut<'toml>(
     path: &str,
     toml: &'toml mut toml::Value,
@@ -284,7 +283,7 @@ pub(crate) fn toml_array_mut<'toml>(
             format!("{}.{}", context, path), cargo_manifest_filepath.to_owned()))?;
 
     Ok(array)
-}
+}*/
 
 pub(crate) fn toml_ensure_array<'toml>(
     path: &str,

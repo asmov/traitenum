@@ -1,7 +1,7 @@
 use std::{env, path::{PathBuf, Path}};
 use crate::{self as lib, cli, cmd, meta, str};
 
-pub fn init_workspace(mut args: cli::InitWorkspaceCommand) -> anyhow::Result<()> {
+pub fn init_workspace(mut args: cli::InitWorkspaceCommand, quiet: bool) -> anyhow::Result<()> {
     // clarify to the user that library.lib_name and library_name are the same
     // todo: remove lib_name from the common
     if args.module.lib_name.is_some() {
@@ -29,21 +29,21 @@ pub fn init_workspace(mut args: cli::InitWorkspaceCommand) -> anyhow::Result<()>
     let workspace_manifest_filepath = cmd::find_cargo_manifest_file(&workspace_path)?;
     let mut workspace_manifest = cmd::read_workspace_manifest(&workspace_manifest_filepath)?;
 
-    lib::log("Updating workspace ...");
+    lib::log(quiet, "Updating workspace ...");
     update_workspace(&args, &mut workspace_manifest, &workspace_manifest_filepath)?;
-    lib::log("Creating lib package ...");
+    lib::log(quiet, "Creating lib package ...");
     super::make_lib(&args.module)?;
-    lib::log("Creating derive package ...");
+    lib::log(quiet, "Creating derive package ...");
     super::make_derive(&args.module)?;
-    lib::log("Configuring lib package ...");
+    lib::log(quiet, "Configuring lib package ...");
     super::config_lib(&args.module)?;
-    lib::log("Configuring derive package ...");
+    lib::log(quiet, "Configuring derive package ...");
     super::config_derive(&args.module)?;
-    lib::log("Building workspace ...");
+    lib::log(quiet, "Building workspace ...");
     super::build_workspace(&args.module)?;
-    lib::log("Testing workspace ...");
+    lib::log(quiet, "Testing workspace ...");
     super::test_workspace(&args.module)?;
-    lib::log_success("Your traitenum workspace is ready.");
+    lib::log_success(quiet, "Your traitenum workspace is ready.");
 
     Ok(())
 }

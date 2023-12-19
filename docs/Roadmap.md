@@ -6,10 +6,10 @@ Version 1
 
 ### todo!()
 
+- Cargo adddon: Don't hardcode example trait on workspace new/init, use lib
 - Cargo addon integration tests
   + catch the crate::path regression before fixing it
 - Derive macro gen shouldn't require a function name input
-- Cargo adddon: Don't hardcode example trait on workspace new/init, use lib
 - One-to-One relationships
 - Implement a common TraitEnum trait for each enum, including:
   + type StaticIterator: Iterator<Item = Self>

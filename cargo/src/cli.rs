@@ -7,6 +7,9 @@ use crate::str;
 #[derive(clap::Parser)]
 #[command(author, version, about, long_about = None)]
 pub struct Cli {
+    #[arg(global = true, short, long)]
+    pub quiet: bool,
+
     #[command(subcommand)]
     pub module: CommandModules
 }
@@ -75,8 +78,8 @@ pub struct InitWorkspaceCommand {
 
 #[derive(clap::Args)]
 pub struct TraitCommand {
-    #[arg(value_parser = validate_crate_path)]
-    pub trait_crate_path: String,
+    #[arg(value_parser = validate_ident)]
+    pub trait_name: String,
     #[arg(long)]
     pub workspace_path: Option<PathBuf>,
     #[arg(long)]
@@ -97,14 +100,8 @@ pub struct RemoveTraitCommand {
     pub module: TraitCommand
 }
 
-
-fn validate_crate_path(path: &str) -> Result<String, &'static str> {
-    if !path.starts_with("crate::") {
-        return Err("Crate paths must start with 'crate::'");
-    }
-
-    match syn::parse_str::<syn::Path>(path) {
-        Ok(_) => Ok(path.to_owned()),
-        Err(_) => Err("Invalid crate path"),
-    }
+fn validate_ident(s: &str) -> Result<String, String> {
+    syn::parse_str::<syn::Ident>(s)
+        .map(|_| s.to_string())
+        .map_err(|e| e.to_string() )
 }

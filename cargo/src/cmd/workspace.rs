@@ -24,21 +24,10 @@ edition = "2021"
 
 [package.metadata.traitenum]
 purpose = "lib"
-
-[[package.metadata.traitenum.trait]]
-crate-path = "crate::ExampleTrait"
 "#;
 
 const LIB_SRC_TEMPLATE: &'static str =
 r#"use traitenum::enumtrait;
-
-#[enumtrait(crate::ExampleTrait)]
-pub trait ExampleTrait {
-    #[enumtrait::Str()]
-    fn nickname(&self) -> &'static str;
-    #[enumtrait::Num(preset(Ordinal))]
-    fn ordinal(&self) -> usize;
-}
 "#;
 
 fn make_lib(library: &cli::WorkspaceCommand) -> anyhow::Result<()> {
@@ -74,39 +63,8 @@ purpose = "derive"
 
 const DERIVE_SRC_TEMPLATE: &'static str =
 r#"traitenum_lib::gen_require!(%{LIB_CRATE_NAME}%, %{DERIVE_CRATE_NAME}%);
-
-traitenum_lib::gen_derive_macro!(ExampleTraitEnum, derive_traitenum_example_trait, traitlib::TRAITENUM_MODEL_BYTES_EXAMPLE_TRAIT);
 "#;
 
-
-const DERIVE_EXAMPLE_TEST_TEMPLATE: &'static str =
-r#"
-#[cfg(test)]
-mod tests {
-    use %{LIB_CRATE_NAME}%::ExampleTrait;
-
-    #[test]
-    fn example_trait() {
-        #[derive(%{DERIVE_CRATE_NAME}%::ExampleTraitEnum)]
-        enum ExampleEnum {
-            #[traitenum(nickname("a"))]
-            Alpha,
-            #[traitenum(nickname("b"))]
-            Bravo,
-            #[traitenum(nickname("c"))]
-            Charlie
-        }
-
-        assert_eq!("a", ExampleEnum::Alpha.nickname());
-        assert_eq!("b", ExampleEnum::Bravo.nickname());
-        assert_eq!("c", ExampleEnum::Charlie.nickname());
-
-        assert_eq!(0, ExampleEnum::Alpha.ordinal());
-        assert_eq!(1, ExampleEnum::Bravo.ordinal());
-        assert_eq!(2, ExampleEnum::Charlie.ordinal());
-    }
-}
-"#;
 
 fn make_derive(library: &cli::WorkspaceCommand) -> anyhow::Result<()> {
     let derive_path = library.workspace_path.as_ref().unwrap().join(&library.derive_dir);
@@ -129,12 +87,9 @@ fn make_derive(library: &cli::WorkspaceCommand) -> anyhow::Result<()> {
 
     fs::write(derive_path.join("src").join("lib.rs"), derive_src)?;
 
-    let derive_example_test = DERIVE_EXAMPLE_TEST_TEMPLATE
-        .replace(VAR_LIB_CRATE_NAME, &lib_name.to_case(case::Case::Snake))
-        .replace(VAR_DERIVE_CRATE_NAME, &derive_name.to_case(case::Case::Snake));
-
+    // create the integration test dir
     fs::create_dir_all(derive_path.join("tests"))?;
-    fs::write(derive_path.join("tests").join("example_trait.rs"), derive_example_test)?;
+    fs::write(derive_path.join("tests").join(".gitignore"), "")?;
 
     Ok(())
 }
@@ -166,6 +121,18 @@ fn config_derive(library: &cli::WorkspaceCommand) -> anyhow::Result<()> {
     cargo_add(&derive_path, Some(lib_name), None)?;
 
     Ok(())
+}
+
+fn add_enumtrait(library: &cli::WorkspaceCommand) -> anyhow::Result<()> {
+    let cmd = cli::AddTraitCommand {
+        module: cli::TraitCommand {
+            trait_name: cmd::enumtrait::EXAMPLE_TRAIT_NAME.to_owned(),
+            workspace_path: library.workspace_path.to_owned(),
+            library_name: library.lib_name.to_owned(),
+        },
+    };
+
+    cmd::add_trait(cmd, true, false)
 }
 
 fn build_workspace(library: &cli::WorkspaceCommand) -> anyhow::Result<()> {
