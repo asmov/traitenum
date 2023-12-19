@@ -2,9 +2,9 @@ use std::str::FromStr;
 use quote::{self, TokenStreamExt, ToTokens};
 use syn::{self, parse, meta::ParseNestedMeta};
 
-use crate::{model, synerr, mksynerr, span, span_site, ERROR_PREFIX, TRAIT_ATTRIBUTE_HELPER_NAME};
+use crate::{model, error::Errors, synerr, mksynerr, error::span_site, TRAIT_ATTRIBUTE_HELPER_NAME};
 
-use super::BoolAttributeDefinition;
+use super::{BoolAttributeDefinition, FieldlessEnumAttributeDefinition};
 
 impl parse::Parse for model::Identifier {
     fn parse(input: parse::ParseStream) -> syn::Result<Self> {
@@ -88,10 +88,7 @@ pub(crate) fn parse_attribute_definition(
 
     attr.parse_nested_meta(|meta| {
         let name = meta.path.get_ident()
-            .ok_or_else(|| {
-                mksynerr!(&meta.path, "Unknown definition property: `{}`",
-                    meta.path.to_token_stream().to_string())
-            })?
+            .ok_or_else(|| mksynerr!(&meta.path, "Expected definition setting name") )?
             .to_string();
 
         let content;
@@ -105,10 +102,10 @@ pub(crate) fn parse_attribute_definition(
             model::NumberAttributeDefinition::<usize>::DEFINITION_NAME => 
                 parse_number_attribute_definition(&mut def, &meta, &name, content, return_type)?,
             model::FieldlessEnumAttributeDefinition::DEFINITION_NAME =>
-                parse_enum_attribute_definition(&mut def, &meta, &name, content, return_type)?,
+                model::FieldlessEnumAttributeDefinition::parse_definition(&mut def, &meta, content, return_type)?,
             model::RelationAttributeDefinition::DEFINITION_NAME =>
                 parse_relation_attribute_definition(&mut def, &meta, &name, content, return_type)?,
-             _ => synerr!(meta.path, "Unknown attribute definition: {}", definition_name)
+             _ => synerr!(meta.path, "Unknown definition type: {}", definition_name)
 
         };
 
@@ -118,11 +115,14 @@ pub(crate) fn parse_attribute_definition(
     Ok(def)
 }
 
-const DEFINITION_DEFAULT: &'static str = "default";
-const DEFINITION_PRESET: &'static str = "preset";
-
+    const DEFINITION_DEFAULT: &'static str = "default";
+    const DEFINITION_PRESET: &'static str = "preset";
+ 
 trait DefinitionParser {
+    const DEFINITION_DEFAULT: &'static str = "default";
+    const DEFINITION_PRESET: &'static str = "preset";
     const NAME: &'static str;
+
 
     fn parse_definition(
         def: &mut model::AttributeDefinition,
@@ -134,11 +134,18 @@ trait DefinitionParser {
     fn parse_setting_name(meta: &ParseNestedMeta) -> syn::Result<String> {
         Ok(meta.path.get_ident()
             .ok_or_else(|| {
-                mksynerr!(&meta.path, "Unknown {} definition setting `{}`",
-                    Self::NAME,
-                    meta.path.to_token_stream().to_string())
+                mksynerr!(&meta.path,
+                    "Expected {} definition setting name",
+                    Self::NAME)
             })?
             .to_string())
+    }
+
+    fn err_unknown_setting<T>(meta_path: impl quote::ToTokens, setting_name: String) -> syn::Result<T> {
+        Errors::UnknownDefinitionSetting {
+            definition: Self::NAME.to_owned(),
+            setting: setting_name
+        }.to_syn_err(meta_path)
     }
 }
 
@@ -147,10 +154,9 @@ macro_rules! bind_def {
         match $def {
             $variant(d) => d,
             _ => unreachable!("Unexpected $variant definition mismatch for setting `{}`", $setting_name)
-        };
+        }
     };
 }
-
 
 impl DefinitionParser for BoolAttributeDefinition {
     const NAME: &'static str = BoolAttributeDefinition::DEFINITION_NAME;
@@ -162,39 +168,41 @@ impl DefinitionParser for BoolAttributeDefinition {
         _return_type: model::ReturnType
     ) -> syn::Result<()> {
         let setting_name = Self::parse_setting_name(meta)?;
-        let mut booldef = bind_def!(model::AttributeDefinition::Bool, def, setting_name);
+        let booldef = bind_def!(model::AttributeDefinition::Bool, def, setting_name);
 
         match setting_name.as_str() {
-            DEFINITION_DEFAULT => {
+            Self::DEFINITION_DEFAULT => {
                     booldef.default = Some(content.parse::<syn::LitBool>()?.value())
             },
-            _ => synerr!(&meta.path, "Unknown attribute definition property: {}", setting_name)
+            _ => return Self::err_unknown_setting(&meta.path, setting_name)
         }
 
         Ok(())
     }
 }
 
-fn parse_enum_attribute_definition(
+impl DefinitionParser for FieldlessEnumAttributeDefinition {
+    const NAME: &'static str = FieldlessEnumAttributeDefinition::DEFINITION_NAME;
+
+    fn parse_definition(
         def: &mut model::AttributeDefinition,
         meta: &ParseNestedMeta,
-        name: &str,
         content: syn::parse::ParseBuffer,
-        _return_type: model::ReturnType) -> Result<(), syn::Error> {
-    let enumdef = match def {
-        model::AttributeDefinition::FieldlessEnum(def) => def,
-        _ => unreachable!("Mismatched definition for Enum: {}", name)
-    };
+        _return_type: model::ReturnType
+    ) -> syn::Result<()> {
+        let setting_name = Self::parse_setting_name(meta)?;
+        let enumdef = bind_def!(model::AttributeDefinition::FieldlessEnum, def, setting_name);
 
-    match name {
-       DEFINITION_DEFAULT => {
-            let id: model::Identifier = content.parse()?;
-            enumdef.default = Some(id)
-       },
-       _ => synerr!(&meta.path, "Unknown definition property for Enum: {}", name)
+        match setting_name.as_str() {
+            Self::DEFINITION_DEFAULT => {
+                let id: model::Identifier = content.parse()?;
+                enumdef.default = Some(id)
+            },
+            _ => return Self::err_unknown_setting(&meta.path, setting_name) 
+        }
+
+        Ok(())
     }
-
-    Ok(())
 }
 
 fn parse_string_attribute_definition(

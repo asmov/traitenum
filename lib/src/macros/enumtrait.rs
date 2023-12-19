@@ -6,7 +6,7 @@ use convert_case::{self as case, Casing};
 use crate::{
     model, macros, model::parse,
     synerr, mksynerr,
-    ERROR_PREFIX, TRAIT_ATTRIBUTE_HELPER_NAME, ENUM_ATTRIBUTE_HELPER_NAME };
+    TRAIT_ATTRIBUTE_HELPER_NAME, ENUM_ATTRIBUTE_HELPER_NAME };
 
 const IDENT_BOX: &'static str = "Box";
 const IDENT_ITERATOR: &'static str = "Iterator";

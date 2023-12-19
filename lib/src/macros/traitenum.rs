@@ -1,11 +1,11 @@
 use quote::{self, ToTokens};
-use syn::{self, spanned::Spanned};
+use syn;
 use proc_macro2;
 
 use crate::{
     model, model::parse,
-    synerr, mksynerr, span, span_site,
-    ERROR_PREFIX, ENUM_ATTRIBUTE_HELPER_NAME};
+    synerr, mksynerr, error::{span, span_site},
+    ENUM_ATTRIBUTE_HELPER_NAME};
 
 #[derive(Debug)]
 pub(crate) struct TraitEnumMacroOutput {
