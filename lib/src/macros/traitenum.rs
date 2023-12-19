@@ -40,7 +40,7 @@ pub(crate) fn parse_traitenum_macro(
         let return_type = method.return_type_tokens();
 
         match method.attribute_definition() {
-            model::AttributeDefinition::Relation(reldef) => {
+            model::Definition::Relation(reldef) => {
                 let rel_id = traitenum.relation_enum_identifier(method_name).unwrap();
                 let relation_path: syn::Path = rel_id.into();
                 let dispatch = reldef.dispatch().unwrap();
@@ -155,7 +155,7 @@ fn parse_traitenum_model(input: &syn::DeriveInput, enumtrait: &model::EnumTrait)
 
             // ensure that we're using a relation attribute definition for this method
             match attribute_definition {
-                model::AttributeDefinition::Relation(_) => (),
+                model::Definition::Relation(_) => (),
                 _ => synerr!(attr, "Trait method definition is not a Relation as expected for enum attribute: {}", attr_name)
             }
 
@@ -207,7 +207,7 @@ fn parse_traitenum_model(input: &syn::DeriveInput, enumtrait: &model::EnumTrait)
         // processed at the top of the enum (it's a one-to-many)
         for method in enumtrait.methods() {
             match method.attribute_definition() {
-                model::AttributeDefinition::Relation(reldef) => {
+                model::Definition::Relation(reldef) => {
                     match reldef.nature {
                         Some(model::RelationNature::OneToMany) => {
                             let method_name = method.name();

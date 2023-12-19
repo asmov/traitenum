@@ -104,9 +104,9 @@ fn parse_trait_fn(methods: &mut Vec<model::Method>, func: &syn::TraitItemFn) -> 
 
     // Parse the attribute definition that is found. If not found, attempt to build a default based on method signature.
     let attribute_def = if let Some(attrib) = attrib {
-        parse::parse_attribute_definition(attrib, return_type, return_type_identifier)?
+        parse::parse_definition(attrib, return_type, return_type_identifier)?
     } else {
-        model::AttributeDefinition::partial(None, return_type, return_type_identifier)
+        model::Definition::partial(None, return_type, return_type_identifier)
             .map_err(|e| {
                 mksynerr!(&func.sig,
                     "Unable to parse definition from return signature for `{}` :: {}",

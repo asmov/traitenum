@@ -4,7 +4,7 @@ use syn::{self, parse, meta::ParseNestedMeta};
 
 use crate::{model, error::Errors, synerr, mksynerr, error::span_site, TRAIT_ATTRIBUTE_HELPER_NAME};
 
-use super::{BoolAttributeDefinition, FieldlessEnumAttributeDefinition, NumberAttributeDefinition};
+use super::{BoolDefinition, FieldlessEnumDefinition, NumberDefinition};
 
 impl parse::Parse for model::Identifier {
     fn parse(input: parse::ParseStream) -> syn::Result<Self> {
@@ -63,11 +63,11 @@ impl TryFrom<&syn::Path> for model::ReturnType {
     }
 }
 
-pub(crate) fn parse_attribute_definition(
+pub(crate) fn parse_definition(
         attr: &syn::Attribute,
         return_type: model::ReturnType,
         return_type_id: Option<model::Identifier>
-    ) -> Result<model::AttributeDefinition, syn::Error> {
+    ) -> Result<model::Definition, syn::Error> {
     if attr.path().segments.len() != 2 {
         synerr!(attr.path(), "Unable to parse helper attribute: `{}`. Format: {}::DefinitionName",
             TRAIT_ATTRIBUTE_HELPER_NAME,
@@ -83,7 +83,7 @@ pub(crate) fn parse_attribute_definition(
         .ident
         .to_string();
 
-    let mut def = model::AttributeDefinition::partial(Some(&definition_type_name), return_type, return_type_id)
+    let mut def = model::Definition::partial(Some(&definition_type_name), return_type, return_type_id)
         .map_err(|_| mksynerr!(attr, "Unable to parse return type for definition"))?;
 
     attr.parse_nested_meta(|meta| {
@@ -111,7 +111,7 @@ trait DefinitionParser {
     const NAME: &'static str;
 
     fn parse_definition(
-        def: &mut model::AttributeDefinition,
+        def: &mut model::Definition,
         meta: &ParseNestedMeta,
         content: syn::parse::ParseBuffer,
         return_type: model::ReturnType
@@ -147,16 +147,16 @@ macro_rules! bind_def {
 struct BoolDefinitionParser{}
 
 impl DefinitionParser for BoolDefinitionParser {
-    const NAME: &'static str = BoolAttributeDefinition::DEFINITION_NAME;
+    const NAME: &'static str = BoolDefinition::TYPE_NAME;
 
     fn parse_definition(
-        def: &mut model::AttributeDefinition,
+        def: &mut model::Definition,
         meta: &ParseNestedMeta,
         content: syn::parse::ParseBuffer,
         _return_type: model::ReturnType
     ) -> syn::Result<()> {
         let setting_name = Self::parse_setting_name(meta)?;
-        let booldef = bind_def!(model::AttributeDefinition::Bool, def, setting_name);
+        let booldef = bind_def!(model::Definition::Bool, def, setting_name);
 
         match setting_name.as_str() {
             Self::DEFINITION_DEFAULT => {
@@ -172,16 +172,16 @@ impl DefinitionParser for BoolDefinitionParser {
 struct EnumDefinitionParser{}
 
 impl DefinitionParser for EnumDefinitionParser {
-    const NAME: &'static str = FieldlessEnumAttributeDefinition::DEFINITION_NAME;
+    const NAME: &'static str = FieldlessEnumDefinition::TYPE_NAME;
 
     fn parse_definition(
-        def: &mut model::AttributeDefinition,
+        def: &mut model::Definition,
         meta: &ParseNestedMeta,
         content: syn::parse::ParseBuffer,
         _return_type: model::ReturnType
     ) -> syn::Result<()> {
         let setting_name = Self::parse_setting_name(meta)?;
-        let enumdef = bind_def!(model::AttributeDefinition::FieldlessEnum, def, setting_name);
+        let enumdef = bind_def!(model::Definition::FieldlessEnum, def, setting_name);
 
         match setting_name.as_str() {
             Self::DEFINITION_DEFAULT => {
@@ -198,16 +198,16 @@ impl DefinitionParser for EnumDefinitionParser {
 struct StrDefinitionParser{}
 
 impl DefinitionParser for StrDefinitionParser {
-    const NAME: &'static str = model::StaticStrAttributeDefinition::DEFINITION_NAME;
+    const NAME: &'static str = model::StaticStrDefinition::DEFINITION_NAME;
 
     fn parse_definition(
-        def: &mut model::AttributeDefinition,
+        def: &mut model::Definition,
         meta: &ParseNestedMeta,
         content: syn::parse::ParseBuffer,
         _return_type: model::ReturnType
     ) -> syn::Result<()> {
         let setting_name = Self::parse_setting_name(meta)?;
-        let strdef = bind_def!(model::AttributeDefinition::StaticStr, def, setting_name);
+        let strdef = bind_def!(model::Definition::StaticStr, def, setting_name);
 
         match setting_name.as_str() {
             Self::DEFINITION_DEFAULT => {
@@ -236,16 +236,16 @@ impl RelDefinitionParser {
 }
 
 impl DefinitionParser for RelDefinitionParser {
-    const NAME: &'static str = model::RelationAttributeDefinition::DEFINITION_NAME;
+    const NAME: &'static str = model::RelationDefinition::TYPE_NAME;
 
     fn parse_definition(
-        def: &mut model::AttributeDefinition,
+        def: &mut model::Definition,
         meta: &ParseNestedMeta,
         content: syn::parse::ParseBuffer,
         _return_type: model::ReturnType
     ) -> syn::Result<()> {
         let setting_name = Self::parse_setting_name(meta)?;
-        let reldef = bind_def!(model::AttributeDefinition::Relation, def, setting_name);
+        let reldef = bind_def!(model::Definition::Relation, def, setting_name);
 
         match setting_name.as_str() {
             Self::DEFINITION_NATURE => {
@@ -276,7 +276,7 @@ impl NumDefinitionParser {
     const DEFINITION_INCREMENT: &'static str = "increment";
 
     fn parse_number_definition<N>(
-            def: &mut model::NumberAttributeDefinition<N>,
+            def: &mut model::NumberDefinition<N>,
             meta: &ParseNestedMeta,
             setting_name: &str,
             content: syn::parse::ParseBuffer,
@@ -326,23 +326,23 @@ impl NumDefinitionParser {
 }
 
 impl DefinitionParser for NumDefinitionParser {
-    const NAME: &'static str = NumberAttributeDefinition::<usize>::DEFINITION_NAME;
+    const NAME: &'static str = NumberDefinition::<usize>::DEFINITION_NAME;
 
     fn parse_definition(
-        def: &mut model::AttributeDefinition,
+        def: &mut model::Definition,
         meta: &ParseNestedMeta,
         content: syn::parse::ParseBuffer,
         return_type: model::ReturnType
     ) -> syn::Result<()> {
         let setting_name = Self::parse_setting_name(meta)?;
         match def {
-            model::AttributeDefinition::UnsignedSize(def) => Self::parse_number_definition(def, meta, &setting_name, content, return_type, false),
-            model::AttributeDefinition::UnsignedInteger64(def) => Self::parse_number_definition(def, meta, &setting_name, content, return_type, false),
-            model::AttributeDefinition::Integer64(def) => Self::parse_number_definition(def, meta, &setting_name, content, return_type, false),
-            model::AttributeDefinition::Float64(def) => Self::parse_number_definition(def, meta, &setting_name, content, return_type, true),
-            model::AttributeDefinition::UnsignedInteger32(def) => Self::parse_number_definition(def, meta, &setting_name, content, return_type, false),
-            model::AttributeDefinition::Integer32(def) => Self::parse_number_definition(def, meta, &setting_name, content, return_type, true),
-            model::AttributeDefinition::Float32(def) => Self::parse_number_definition(def, meta, &setting_name, content, return_type, false),
+            model::Definition::UnsignedSize(def) => Self::parse_number_definition(def, meta, &setting_name, content, return_type, false),
+            model::Definition::UnsignedInteger64(def) => Self::parse_number_definition(def, meta, &setting_name, content, return_type, false),
+            model::Definition::Integer64(def) => Self::parse_number_definition(def, meta, &setting_name, content, return_type, false),
+            model::Definition::Float64(def) => Self::parse_number_definition(def, meta, &setting_name, content, return_type, true),
+            model::Definition::UnsignedInteger32(def) => Self::parse_number_definition(def, meta, &setting_name, content, return_type, false),
+            model::Definition::Integer32(def) => Self::parse_number_definition(def, meta, &setting_name, content, return_type, true),
+            model::Definition::Float32(def) => Self::parse_number_definition(def, meta, &setting_name, content, return_type, false),
             _ => unreachable!("Unexpected Num definition associated data for setting: {}", setting_name)
         }
     }
@@ -375,27 +375,27 @@ pub(crate) fn parse_variant(variant_name: &str, attr: &syn::Attribute, model: &m
         syn::parenthesized!(content in meta.input);
 
         let value = match attribute_def {
-            model::AttributeDefinition::Bool(_) => model::Value::Bool(
+            model::Definition::Bool(_) => model::Value::Bool(
                 content.parse::<syn::LitBool>()?.value()),
-            model::AttributeDefinition::StaticStr(_) => model::Value::StaticStr(
+            model::Definition::StaticStr(_) => model::Value::StaticStr(
                 content.parse::<syn::LitStr>()?.value()),
-            model::AttributeDefinition::UnsignedSize(_) => model::Value::UnsignedSize(
+            model::Definition::UnsignedSize(_) => model::Value::UnsignedSize(
                 content.parse::<syn::LitInt>()?.base10_parse()?),
-            model::AttributeDefinition::UnsignedInteger64(_) => model::Value::UnsignedInteger64(
+            model::Definition::UnsignedInteger64(_) => model::Value::UnsignedInteger64(
                 content.parse::<syn::LitInt>()?.base10_parse()?),
-            model::AttributeDefinition::Integer64(_) => model::Value::Integer64(
+            model::Definition::Integer64(_) => model::Value::Integer64(
                 content.parse::<syn::LitInt>()?.base10_parse()?),
-            model::AttributeDefinition::Float64(_) => model::Value::Float64(
+            model::Definition::Float64(_) => model::Value::Float64(
                 content.parse::<syn::LitFloat>()?.base10_parse()?),
-            model::AttributeDefinition::UnsignedInteger32(_) => model::Value::UnsignedInteger32(
+            model::Definition::UnsignedInteger32(_) => model::Value::UnsignedInteger32(
                 content.parse::<syn::LitInt>()?.base10_parse()?),
-            model::AttributeDefinition::Integer32(_) => model::Value::Integer32(
+            model::Definition::Integer32(_) => model::Value::Integer32(
                 content.parse::<syn::LitInt>()?.base10_parse()?),
-            model::AttributeDefinition::Float32(_) => model::Value::Float32(
+            model::Definition::Float32(_) => model::Value::Float32(
                 content.parse::<syn::LitFloat>()?.base10_parse()?),
-            model::AttributeDefinition::Byte(_) => model::Value::Byte(
+            model::Definition::Byte(_) => model::Value::Byte(
                 content.parse::<syn::LitByte>()?.value()),
-            model::AttributeDefinition::FieldlessEnum(enumdef) => {
+            model::Definition::FieldlessEnum(enumdef) => {
                 let mut id = content.parse::<model::Identifier>()?;
                 // users are allowed to drop the enum type in short-hand (Foo instead of MyEnum::Foo)
                 // fill in the path if they do this
@@ -405,9 +405,9 @@ pub(crate) fn parse_variant(variant_name: &str, attr: &syn::Attribute, model: &m
 
                 model::Value::EnumVariant(id)
             },
-            model::AttributeDefinition::Relation(_) => model::Value::Relation(
+            model::Definition::Relation(_) => model::Value::Relation(
                 content.parse::<model::Identifier>()?),
-            model::AttributeDefinition::Type(_) => model::Value::Type(
+            model::Definition::Type(_) => model::Value::Type(
                 content.parse::<model::Identifier>()?),
         };
 
@@ -532,9 +532,9 @@ impl model::Method {
             },
             model::ReturnType::Type => {
                 match self.attribute_definition() {
-                    model::AttributeDefinition::FieldlessEnum(enumdef) => enumdef.identifier.to_token_stream(),
+                    model::Definition::FieldlessEnum(enumdef) => enumdef.identifier.to_token_stream(),
                     // statically dispatched relations
-                    model::AttributeDefinition::Relation(reldef) => reldef.identifier.to_token_stream(),
+                    model::Definition::Relation(reldef) => reldef.identifier.to_token_stream(),
                     _ => unreachable!("Invalid attribute definition for ReturnType::Type")
                 }
             },

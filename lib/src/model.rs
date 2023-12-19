@@ -15,11 +15,11 @@ impl EnumTrait {
     pub fn identifier(&self) -> &Identifier { &self.identifier }
     pub fn methods(&self) -> &[Method] { &self.methods }
     
-    pub fn relation_methods(&self) -> Vec<(&Method, &RelationAttributeDefinition)> {
+    pub fn relation_methods(&self) -> Vec<(&Method, &RelationDefinition)> {
         self.methods.iter()
             .filter_map(|method|
                 match method.attribute_definition {
-                    AttributeDefinition::Relation(ref relation_def) => Some((method, relation_def)),
+                    Definition::Relation(ref relation_def) => Some((method, relation_def)),
                     _ => None
                 }
             )
@@ -153,23 +153,23 @@ impl FromStr for ReturnType {
 }
 
 #[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize)]
-pub enum AttributeDefinition {
-    Bool(BoolAttributeDefinition),
-    StaticStr(StaticStrAttributeDefinition),
-    UnsignedSize(NumberAttributeDefinition<usize>),
-    UnsignedInteger64(NumberAttributeDefinition<u64>),
-    Integer64(NumberAttributeDefinition<i64>),
-    Float64(NumberAttributeDefinition<f64>),
-    UnsignedInteger32(NumberAttributeDefinition<u32>),
-    Integer32(NumberAttributeDefinition<i32>),
-    Float32(NumberAttributeDefinition<f32>),
-    Byte(NumberAttributeDefinition<u8>),
-    FieldlessEnum(FieldlessEnumAttributeDefinition),
-    Relation(RelationAttributeDefinition),
-    Type(TypeAttributeDefinition)
+pub enum Definition {
+    Bool(BoolDefinition),
+    StaticStr(StaticStrDefinition),
+    UnsignedSize(NumberDefinition<usize>),
+    UnsignedInteger64(NumberDefinition<u64>),
+    Integer64(NumberDefinition<i64>),
+    Float64(NumberDefinition<f64>),
+    UnsignedInteger32(NumberDefinition<u32>),
+    Integer32(NumberDefinition<i32>),
+    Float32(NumberDefinition<f32>),
+    Byte(NumberDefinition<u8>),
+    FieldlessEnum(FieldlessEnumDefinition),
+    Relation(RelationDefinition),
+    Type(TypeDefinition)
 }
 
-impl AttributeDefinition {
+impl Definition {
     pub fn partial(definition_name: Option<&str>, return_type: ReturnType, return_identifier: Option<Identifier>)
             -> Result<Self, String> {
 
@@ -186,51 +186,51 @@ impl AttributeDefinition {
 
         let result = match return_type {
             ReturnType::Bool => {
-                chk_defname!(BoolAttributeDefinition::DEFINITION_NAME);
-                AttributeDefinition::Bool(BoolAttributeDefinition::new())
+                chk_defname!(BoolDefinition::TYPE_NAME);
+                Definition::Bool(BoolDefinition::new())
             },
             ReturnType::StaticStr => {
-                chk_defname!(StaticStrAttributeDefinition::DEFINITION_NAME);
-                AttributeDefinition::StaticStr(StaticStrAttributeDefinition::new())
+                chk_defname!(StaticStrDefinition::DEFINITION_NAME);
+                Definition::StaticStr(StaticStrDefinition::new())
             },
             ReturnType::UnsignedSize => {
-                chk_defname!(NumberAttributeDefinition::<usize>::DEFINITION_NAME);
-                AttributeDefinition::UnsignedSize(NumberAttributeDefinition::new())
+                chk_defname!(NumberDefinition::<usize>::DEFINITION_NAME);
+                Definition::UnsignedSize(NumberDefinition::new())
             },
             ReturnType::UnsignedInteger64 => {
-                chk_defname!(NumberAttributeDefinition::<u64>::DEFINITION_NAME);
-                AttributeDefinition::UnsignedInteger64(NumberAttributeDefinition::new())
+                chk_defname!(NumberDefinition::<u64>::DEFINITION_NAME);
+                Definition::UnsignedInteger64(NumberDefinition::new())
             },
             ReturnType::Integer64 => {
-                chk_defname!(NumberAttributeDefinition::<i64>::DEFINITION_NAME);
-                AttributeDefinition::Integer64(NumberAttributeDefinition::new())
+                chk_defname!(NumberDefinition::<i64>::DEFINITION_NAME);
+                Definition::Integer64(NumberDefinition::new())
             },
             ReturnType::Float64 => {
-                chk_defname!(NumberAttributeDefinition::<f64>::DEFINITION_NAME);
-                AttributeDefinition::Float64(NumberAttributeDefinition::new())
+                chk_defname!(NumberDefinition::<f64>::DEFINITION_NAME);
+                Definition::Float64(NumberDefinition::new())
             },
             ReturnType::UnsignedInteger32 => {
-                chk_defname!(NumberAttributeDefinition::<u32>::DEFINITION_NAME);
-                AttributeDefinition::UnsignedInteger32(NumberAttributeDefinition::new())
+                chk_defname!(NumberDefinition::<u32>::DEFINITION_NAME);
+                Definition::UnsignedInteger32(NumberDefinition::new())
             },
             ReturnType::Integer32 => {
-                chk_defname!(NumberAttributeDefinition::<i32>::DEFINITION_NAME);
-                AttributeDefinition::Integer32(NumberAttributeDefinition::new())
+                chk_defname!(NumberDefinition::<i32>::DEFINITION_NAME);
+                Definition::Integer32(NumberDefinition::new())
             },
             ReturnType::Float32 => {
-                chk_defname!(NumberAttributeDefinition::<f32>::DEFINITION_NAME);
-                AttributeDefinition::Float32(NumberAttributeDefinition::new())
+                chk_defname!(NumberDefinition::<f32>::DEFINITION_NAME);
+                Definition::Float32(NumberDefinition::new())
             },
             ReturnType::Byte => {
-                chk_defname!(NumberAttributeDefinition::<u8>::DEFINITION_NAME);
-                AttributeDefinition::Byte(NumberAttributeDefinition::new())
+                chk_defname!(NumberDefinition::<u8>::DEFINITION_NAME);
+                Definition::Byte(NumberDefinition::new())
             },
             ReturnType::BoxedTrait => {
-                chk_defname!(RelationAttributeDefinition::DEFINITION_NAME);
+                chk_defname!(RelationDefinition::TYPE_NAME);
                 let id = return_identifier.ok_or("Missing Identifier for ReturnType::BoxedTrait")?;
                 match definition_name {
                     Some("Rel") | None => {
-                        let mut attr_def = AttributeDefinition::Relation(RelationAttributeDefinition::new(id));
+                        let mut attr_def = Definition::Relation(RelationDefinition::new(id));
                         let rel_def = attr_def.get_relation_definition_mut();
                         rel_def.dispatch = Some(Dispatch::BoxedTrait);
                         attr_def
@@ -243,11 +243,11 @@ impl AttributeDefinition {
                 }
             },
             ReturnType::BoxedTraitIterator => {
-                chk_defname!(RelationAttributeDefinition::DEFINITION_NAME);
+                chk_defname!(RelationDefinition::TYPE_NAME);
                 let id = return_identifier.ok_or("Missing Identifier for ReturnType::BoxedTraitIterator")?;
                 match definition_name {
                     Some("Rel") | None => {
-                        let mut attr_def = AttributeDefinition::Relation(RelationAttributeDefinition::new(id));
+                        let mut attr_def = Definition::Relation(RelationDefinition::new(id));
                         let rel_def = attr_def.get_relation_definition_mut();
                         rel_def.dispatch = Some(Dispatch::BoxedTrait);
                         rel_def.nature = Some(RelationNature::OneToMany);
@@ -262,18 +262,18 @@ impl AttributeDefinition {
             },
             //TODO: remove
             ReturnType::AssociatedType => {
-                chk_defname!(RelationAttributeDefinition::DEFINITION_NAME);
+                chk_defname!(RelationDefinition::TYPE_NAME);
                 let id = return_identifier.ok_or("Missing Identifier for ReturnType::AssociatedType")?;
-                let mut reldef = RelationAttributeDefinition::new(id);
+                let mut reldef = RelationDefinition::new(id);
                 reldef.dispatch = Some(Dispatch::Other);
-                AttributeDefinition::Relation(reldef)
+                Definition::Relation(reldef)
             },
             // Enums will never be implied as their type cannot be determined without reflection
             // This is here for posterity
             ReturnType::Enum => {
-                chk_defname!(FieldlessEnumAttributeDefinition::DEFINITION_NAME);
+                chk_defname!(FieldlessEnumDefinition::TYPE_NAME);
                 let id = return_identifier.ok_or("Missing Identifier for ReturnType::Enum")?;
-                AttributeDefinition::FieldlessEnum(FieldlessEnumAttributeDefinition::new(id))
+                Definition::FieldlessEnum(FieldlessEnumDefinition::new(id))
             },
             // Type is a catch-all for return types that cannot be implied: Enum 
             ReturnType::Type => {
@@ -281,8 +281,8 @@ impl AttributeDefinition {
                 match definition_name {
                     // Enums will never be implied as their type cannot be determined without reflection
                     // This is where Enums will actually be initialized (not the match arm for Enum above)
-                    Some(FieldlessEnumAttributeDefinition::DEFINITION_NAME) => {
-                        AttributeDefinition::FieldlessEnum(FieldlessEnumAttributeDefinition::new(id))
+                    Some(FieldlessEnumDefinition::TYPE_NAME) => {
+                        Definition::FieldlessEnum(FieldlessEnumDefinition::new(id))
                     },
                     Some(s) => {
                         return Err(format!(
@@ -303,88 +303,88 @@ impl AttributeDefinition {
 
     pub fn has_default(&self) -> bool {
         match self {
-            AttributeDefinition::Bool(booldef) => booldef.default.is_some(),
-            AttributeDefinition::StaticStr(strdef) => strdef.default.is_some(),
-            AttributeDefinition::UnsignedSize(numdef) => numdef.default.is_some(),
-            AttributeDefinition::UnsignedInteger64(numdef) => numdef.default.is_some(),
-            AttributeDefinition::Integer64(numdef) => numdef.default.is_some(),
-            AttributeDefinition::Float64(numdef) => numdef.default.is_some(),
-            AttributeDefinition::UnsignedInteger32(numdef) => numdef.default.is_some(),
-            AttributeDefinition::Integer32(numdef) => numdef.default.is_some(),
-            AttributeDefinition::Float32(numdef) => numdef.default.is_some(),
-            AttributeDefinition::Byte(numdef) => numdef.default.is_some(),
-            AttributeDefinition::FieldlessEnum(typedef) => typedef.default.is_some(),
-            AttributeDefinition::Relation(_reldef) => false,
-            AttributeDefinition::Type(_typedef) => false,
+            Definition::Bool(booldef) => booldef.default.is_some(),
+            Definition::StaticStr(strdef) => strdef.default.is_some(),
+            Definition::UnsignedSize(numdef) => numdef.default.is_some(),
+            Definition::UnsignedInteger64(numdef) => numdef.default.is_some(),
+            Definition::Integer64(numdef) => numdef.default.is_some(),
+            Definition::Float64(numdef) => numdef.default.is_some(),
+            Definition::UnsignedInteger32(numdef) => numdef.default.is_some(),
+            Definition::Integer32(numdef) => numdef.default.is_some(),
+            Definition::Float32(numdef) => numdef.default.is_some(),
+            Definition::Byte(numdef) => numdef.default.is_some(),
+            Definition::FieldlessEnum(typedef) => typedef.default.is_some(),
+            Definition::Relation(_reldef) => false,
+            Definition::Type(_typedef) => false,
         }
     }
 
     pub fn default(&self) -> Option<Value> {
         match self {
-            AttributeDefinition::Bool(ref booldef) => match &booldef.default {
+            Definition::Bool(ref booldef) => match &booldef.default {
                 Some(b) => Some(Value::Bool(*b)),
                 None => None
             },
-            AttributeDefinition::StaticStr(ref strdef) => match &strdef.default {
+            Definition::StaticStr(ref strdef) => match &strdef.default {
                 Some(s) => Some(Value::StaticStr(s.to_string())),
                 None => None
             },
-            AttributeDefinition::UnsignedSize(ref numdef) => match &numdef.default {
+            Definition::UnsignedSize(ref numdef) => match &numdef.default {
                 Some(n) => Some(Value::UnsignedSize(*n)),
                 None => None
             },
-            AttributeDefinition::UnsignedInteger64(ref numdef) => match &numdef.default {
+            Definition::UnsignedInteger64(ref numdef) => match &numdef.default {
                 Some(n) => Some(Value::UnsignedInteger64(*n)),
                 None => None
             },
-            AttributeDefinition::Integer64(ref numdef) => match &numdef.default {
+            Definition::Integer64(ref numdef) => match &numdef.default {
                 Some(n) => Some(Value::Integer64(*n)),
                 None => None
             },
-            AttributeDefinition::Float64(ref numdef) => match &numdef.default {
+            Definition::Float64(ref numdef) => match &numdef.default {
                 Some(n) => Some(Value::Float64(*n)),
                 None => None
             },
-            AttributeDefinition::UnsignedInteger32(ref numdef) => match &numdef.default {
+            Definition::UnsignedInteger32(ref numdef) => match &numdef.default {
                 Some(n) => Some(Value::UnsignedInteger32(*n)),
                 None => None
             },
-            AttributeDefinition::Integer32(ref numdef) => match &numdef.default {
+            Definition::Integer32(ref numdef) => match &numdef.default {
                 Some(n) => Some(Value::Integer32(*n)),
                 None => None
             },
-            AttributeDefinition::Float32(ref numdef) => match &numdef.default {
+            Definition::Float32(ref numdef) => match &numdef.default {
                 Some(n) => Some(Value::Float32(*n)),
                 None => None
             },
-            AttributeDefinition::Byte(ref numdef) => match &numdef.default {
+            Definition::Byte(ref numdef) => match &numdef.default {
                 Some(n) => Some(Value::Byte(*n)),
                 None => None
             },
-            AttributeDefinition::FieldlessEnum(ref typedef) => match &typedef.default {
+            Definition::FieldlessEnum(ref typedef) => match &typedef.default {
                 Some(id) => Some(Value::EnumVariant(id.clone())),
                 None => None
             },
-            AttributeDefinition::Relation(_reldef) => None,
-            AttributeDefinition::Type(_reldef) => None,
+            Definition::Relation(_reldef) => None,
+            Definition::Type(_reldef) => None,
         }
     }
 
     pub fn has_preset(&self) -> bool {
         match self {
-            AttributeDefinition::Bool(_booldef) => false,
-            AttributeDefinition::StaticStr(strdef) => strdef.preset.is_some(),
-            AttributeDefinition::UnsignedSize(numdef) => numdef.preset.is_some(),
-            AttributeDefinition::UnsignedInteger64(numdef) => numdef.preset.is_some(),
-            AttributeDefinition::Integer64(numdef) => numdef.preset.is_some(),
-            AttributeDefinition::Float64(numdef) => numdef.preset.is_some(),
-            AttributeDefinition::UnsignedInteger32(numdef) => numdef.preset.is_some(),
-            AttributeDefinition::Integer32(numdef) => numdef.preset.is_some(),
-            AttributeDefinition::Float32(numdef) => numdef.preset.is_some(),
-            AttributeDefinition::Byte(numdef) => numdef.preset.is_some(),
-            AttributeDefinition::FieldlessEnum(_typedef) => false,
-            AttributeDefinition::Relation(_reldef) => false,
-            AttributeDefinition::Type(_typedef) => false,
+            Definition::Bool(_booldef) => false,
+            Definition::StaticStr(strdef) => strdef.preset.is_some(),
+            Definition::UnsignedSize(numdef) => numdef.preset.is_some(),
+            Definition::UnsignedInteger64(numdef) => numdef.preset.is_some(),
+            Definition::Integer64(numdef) => numdef.preset.is_some(),
+            Definition::Float64(numdef) => numdef.preset.is_some(),
+            Definition::UnsignedInteger32(numdef) => numdef.preset.is_some(),
+            Definition::Integer32(numdef) => numdef.preset.is_some(),
+            Definition::Float32(numdef) => numdef.preset.is_some(),
+            Definition::Byte(numdef) => numdef.preset.is_some(),
+            Definition::FieldlessEnum(_typedef) => false,
+            Definition::Relation(_reldef) => false,
+            Definition::Type(_typedef) => false,
         }
         
     }
@@ -408,22 +408,22 @@ impl AttributeDefinition {
         }
 
         match self {
-            AttributeDefinition::Bool(_booldef) => None,
-            AttributeDefinition::StaticStr(ref strdef) => {
+            Definition::Bool(_booldef) => None,
+            Definition::StaticStr(ref strdef) => {
                 let preset = match &strdef.preset { Some(p) => p, None => return None };
                 Some(Value::StaticStr(preset.convert(variant_name)))
             },
-            AttributeDefinition::UnsignedSize(ref numdef) => preset_numdef!(Value::UnsignedSize, usize, numdef),
-            AttributeDefinition::UnsignedInteger64(ref numdef) => preset_numdef!(Value::UnsignedInteger64, u64, numdef),
-            AttributeDefinition::Integer64(ref numdef) => preset_numdef!(Value::Integer64, i64, numdef),
-            AttributeDefinition::Float64(ref numdef) => preset_numdef!(Value::Float64, f64, numdef),
-            AttributeDefinition::UnsignedInteger32(ref numdef) => preset_numdef!(Value::UnsignedInteger32, u32, numdef),
-            AttributeDefinition::Integer32(ref numdef) => preset_numdef!(Value::Integer32, i32, numdef),
-            AttributeDefinition::Float32(ref numdef) => preset_numdef!(Value::Float32, f32, numdef),
-            AttributeDefinition::Byte(ref numdef) => preset_numdef!(Value::Byte, u8, numdef),
-            AttributeDefinition::FieldlessEnum(_typedef) => None,
-            AttributeDefinition::Relation(_reldef) => None,
-            AttributeDefinition::Type(_typedef) => None,
+            Definition::UnsignedSize(ref numdef) => preset_numdef!(Value::UnsignedSize, usize, numdef),
+            Definition::UnsignedInteger64(ref numdef) => preset_numdef!(Value::UnsignedInteger64, u64, numdef),
+            Definition::Integer64(ref numdef) => preset_numdef!(Value::Integer64, i64, numdef),
+            Definition::Float64(ref numdef) => preset_numdef!(Value::Float64, f64, numdef),
+            Definition::UnsignedInteger32(ref numdef) => preset_numdef!(Value::UnsignedInteger32, u32, numdef),
+            Definition::Integer32(ref numdef) => preset_numdef!(Value::Integer32, i32, numdef),
+            Definition::Float32(ref numdef) => preset_numdef!(Value::Float32, f32, numdef),
+            Definition::Byte(ref numdef) => preset_numdef!(Value::Byte, u8, numdef),
+            Definition::FieldlessEnum(_typedef) => None,
+            Definition::Relation(_reldef) => None,
+            Definition::Type(_typedef) => None,
         }
     }
 
@@ -441,7 +441,7 @@ impl AttributeDefinition {
 
     pub fn needs_value(&self) -> bool {
         match self {
-            AttributeDefinition::Relation(ref reldef) => match &reldef.nature {
+            Definition::Relation(ref reldef) => match &reldef.nature {
                 Some(relationship) => match relationship {
                     RelationNature::OneToOne => false,
                     RelationNature::OneToMany => true,
@@ -460,44 +460,44 @@ impl AttributeDefinition {
         }
 
         match self {
-            AttributeDefinition::Bool(_booldef) => Ok(()),
-            AttributeDefinition::StaticStr(_strdef) => Ok(()),
-            AttributeDefinition::UnsignedSize(numdef) => numdef.validate(),
-            AttributeDefinition::UnsignedInteger64(numdef) => numdef.validate(),
-            AttributeDefinition::Integer64(numdef) => numdef.validate(),
-            AttributeDefinition::Float64(numdef) => numdef.validate(),
-            AttributeDefinition::UnsignedInteger32(numdef) => numdef.validate(),
-            AttributeDefinition::Integer32(numdef) => numdef.validate(),
-            AttributeDefinition::Float32(numdef) => numdef.validate(),
-            AttributeDefinition::Byte(numdef) => numdef.validate(),
-            AttributeDefinition::FieldlessEnum(enumdef) => enumdef.validate(),
-            AttributeDefinition::Relation(reldef) => reldef.validate(),
-            AttributeDefinition::Type(_) => unreachable!("Type definitions should not be directly accessible"),
+            Definition::Bool(_booldef) => Ok(()),
+            Definition::StaticStr(_strdef) => Ok(()),
+            Definition::UnsignedSize(numdef) => numdef.validate(),
+            Definition::UnsignedInteger64(numdef) => numdef.validate(),
+            Definition::Integer64(numdef) => numdef.validate(),
+            Definition::Float64(numdef) => numdef.validate(),
+            Definition::UnsignedInteger32(numdef) => numdef.validate(),
+            Definition::Integer32(numdef) => numdef.validate(),
+            Definition::Float32(numdef) => numdef.validate(),
+            Definition::Byte(numdef) => numdef.validate(),
+            Definition::FieldlessEnum(enumdef) => enumdef.validate(),
+            Definition::Relation(reldef) => reldef.validate(),
+            Definition::Type(_) => unreachable!("Type definitions should not be directly accessible"),
         }
     }
 
-    pub fn get_relation_definition(&self) -> &RelationAttributeDefinition {
+    pub fn get_relation_definition(&self) -> &RelationDefinition {
         match self {
             Self::Relation(ref def) => def,
-            _ => unreachable!("Unexpected definition type: {}", RelationAttributeDefinition::DEFINITION_NAME)
+            _ => unreachable!("Unexpected definition type: {}", RelationDefinition::TYPE_NAME)
         }
     }
 
-    pub fn get_relation_definition_mut(&mut self) -> &mut RelationAttributeDefinition {
+    pub fn get_relation_definition_mut(&mut self) -> &mut RelationDefinition {
         match self {
             Self::Relation(ref mut def) => def,
-            _ => unreachable!("Unexpected definition type: {}", RelationAttributeDefinition::DEFINITION_NAME)
+            _ => unreachable!("Unexpected definition type: {}", RelationDefinition::TYPE_NAME)
         }
     }
 }
 
 #[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize)]
-pub struct BoolAttributeDefinition {
+pub struct BoolDefinition {
     pub(crate) default: Option<bool>,
 }
 
-impl BoolAttributeDefinition {
-    const DEFINITION_NAME: &'static str = "Bool";
+impl BoolDefinition {
+    const TYPE_NAME: &'static str = "Bool";
 
     pub fn new() -> Self {
         Self {
@@ -511,14 +511,14 @@ impl BoolAttributeDefinition {
 }
 
 #[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize)]
-pub struct NumberAttributeDefinition<N> {
+pub struct NumberDefinition<N> {
     pub(crate) default: Option<N>,
     pub(crate) preset: Option<NumberPreset>,
     pub(crate) start: Option<N>,
     pub(crate) increment: Option<N>,
 }
 
-impl<N> NumberAttributeDefinition<N> {
+impl<N> NumberDefinition<N> {
     const DEFINITION_NAME: &'static str = "Num";
 
     pub fn new() -> Self {
@@ -637,12 +637,12 @@ impl FromStr for NumberPreset {
 }
 
 #[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize)]
-pub struct StaticStrAttributeDefinition {
+pub struct StaticStrDefinition {
     pub(crate) default: Option<String>,
     pub(crate) preset: Option<StringPreset>,
 }
 
-impl StaticStrAttributeDefinition {
+impl StaticStrDefinition {
     const DEFINITION_NAME: &'static str = "Str";
 
     pub fn new() -> Self {
@@ -654,13 +654,13 @@ impl StaticStrAttributeDefinition {
 }
 
 #[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize)]
-pub struct FieldlessEnumAttributeDefinition {
+pub struct FieldlessEnumDefinition {
     identifier: Identifier,
     default: Option<Identifier>
 }
 
-impl FieldlessEnumAttributeDefinition {
-    const DEFINITION_NAME: &'static str = "Enum";
+impl FieldlessEnumDefinition {
+    const TYPE_NAME: &'static str = "Enum";
 
     pub fn new(identifier: Identifier) -> Self {
         Self {
@@ -675,11 +675,11 @@ impl FieldlessEnumAttributeDefinition {
 }
 
 #[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize)]
-pub struct TypeAttributeDefinition {
+pub struct TypeDefinition {
     identifier: Identifier,
 }
 
-impl TypeAttributeDefinition {
+impl TypeDefinition {
     pub fn new(identifier: Identifier) -> Self {
         Self {
             identifier
@@ -731,14 +731,14 @@ impl FromStr for Dispatch {
 
 
 #[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize)]
-pub struct RelationAttributeDefinition {
+pub struct RelationDefinition {
     identifier: Identifier,
     dispatch: Option<Dispatch>,
     pub(crate) nature: Option<RelationNature>,
 }
 
-impl RelationAttributeDefinition {
-    const DEFINITION_NAME: &'static str = "Rel";
+impl RelationDefinition {
+    const TYPE_NAME: &'static str = "Rel";
 
     pub fn identifier(&self) -> &Identifier { &self.identifier }
     pub fn dispatch(&self) -> Option<Dispatch> { self.dispatch }
@@ -772,15 +772,15 @@ impl RelationAttributeDefinition {
 pub struct Method {
     name: String,
     return_type: ReturnType,
-    attribute_definition: AttributeDefinition
+    attribute_definition: Definition
 }
 
 impl Method {
     pub fn name(&self) -> &str { &self.name }
     pub fn return_type(&self) -> ReturnType { self.return_type }
-    pub fn attribute_definition(&self) -> &AttributeDefinition { &self.attribute_definition }
+    pub fn attribute_definition(&self) -> &Definition { &self.attribute_definition }
 
-    pub fn new(name: String, return_type: ReturnType, attribute_definition: AttributeDefinition) -> Self {
+    pub fn new(name: String, return_type: ReturnType, attribute_definition: Definition) -> Self {
         Self {
             name,
             return_type,
