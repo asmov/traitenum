@@ -4,14 +4,14 @@ use syn::{self, parse, meta::ParseNestedMeta};
 
 use crate::{model, error::Errors, synerr, mksynerr, error::span_site, TRAIT_ATTRIBUTE_HELPER_NAME};
 
-use super::{BoolAttributeDefinition, FieldlessEnumAttributeDefinition};
+use super::{BoolAttributeDefinition, FieldlessEnumAttributeDefinition, NumberAttributeDefinition};
 
 impl parse::Parse for model::Identifier {
     fn parse(input: parse::ParseStream) -> syn::Result<Self> {
         let path: syn::Path = input.parse()?;
         Self::try_from(&path)
-            .or_else(|_| {
-                synerr!(&path, "Unable to parse Identifier from Path: {}",
+            .map_err(|_| {
+                mksynerr!(&path, "Unable to parse Identifier from Path: {}",
                     path.to_token_stream().to_string())
             })
     }
@@ -74,7 +74,7 @@ pub(crate) fn parse_attribute_definition(
             attr.path().to_token_stream().to_string())
     }
 
-    let definition_name = attr.path().segments.last()
+    let definition_type_name = attr.path().segments.last()
         .ok_or_else(|| {
             mksynerr!(attr,
                 "Empty helper attribute definition name. Format: {}::DefinitionName",
@@ -83,30 +83,20 @@ pub(crate) fn parse_attribute_definition(
         .ident
         .to_string();
 
-    let mut def = model::AttributeDefinition::partial(Some(&definition_name), return_type, return_type_id)
+    let mut def = model::AttributeDefinition::partial(Some(&definition_type_name), return_type, return_type_id)
         .map_err(|_| mksynerr!(attr, "Unable to parse return type for definition"))?;
 
     attr.parse_nested_meta(|meta| {
-        let name = meta.path.get_ident()
-            .ok_or_else(|| mksynerr!(&meta.path, "Expected definition setting name") )?
-            .to_string();
-
         let content;
         syn::parenthesized!(content in meta.input);
 
-        match definition_name.as_str() {
-            model::BoolAttributeDefinition::DEFINITION_NAME =>  
-                model::BoolAttributeDefinition::parse_definition(&mut def, &meta, content, return_type)?,
-            model::StaticStrAttributeDefinition::DEFINITION_NAME => 
-                parse_string_attribute_definition(&mut def, &meta, &name, content, return_type)?,
-            model::NumberAttributeDefinition::<usize>::DEFINITION_NAME => 
-                parse_number_attribute_definition(&mut def, &meta, &name, content, return_type)?,
-            model::FieldlessEnumAttributeDefinition::DEFINITION_NAME =>
-                model::FieldlessEnumAttributeDefinition::parse_definition(&mut def, &meta, content, return_type)?,
-            model::RelationAttributeDefinition::DEFINITION_NAME =>
-                parse_relation_attribute_definition(&mut def, &meta, &name, content, return_type)?,
-             _ => synerr!(meta.path, "Unknown definition type: {}", definition_name)
-
+        match definition_type_name.as_str() {
+            BoolDefinitionParser::NAME => BoolDefinitionParser::parse_definition(&mut def, &meta, content, return_type)?,
+            StrDefinitionParser::NAME => StrDefinitionParser::parse_definition(&mut def, &meta, content, return_type)?,
+            NumDefinitionParser::NAME => NumDefinitionParser::parse_definition(&mut def, &meta, content, return_type)?,
+            EnumDefinitionParser::NAME => EnumDefinitionParser::parse_definition(&mut def, &meta, content, return_type)?,
+            RelDefinitionParser::NAME => RelDefinitionParser::parse_definition(&mut def, &meta, content, return_type)?,
+             _ => synerr!(meta.path, "Unknown definition type: {}", definition_type_name)
         };
 
         Ok(())
@@ -115,14 +105,10 @@ pub(crate) fn parse_attribute_definition(
     Ok(def)
 }
 
-    const DEFINITION_DEFAULT: &'static str = "default";
-    const DEFINITION_PRESET: &'static str = "preset";
- 
 trait DefinitionParser {
     const DEFINITION_DEFAULT: &'static str = "default";
     const DEFINITION_PRESET: &'static str = "preset";
     const NAME: &'static str;
-
 
     fn parse_definition(
         def: &mut model::AttributeDefinition,
@@ -153,12 +139,14 @@ macro_rules! bind_def {
     ($variant:path, $def:ident, $setting_name:ident) => {
         match $def {
             $variant(d) => d,
-            _ => unreachable!("Unexpected $variant definition mismatch for setting `{}`", $setting_name)
+            _ => unreachable!("Mismatch $variant definition for setting `{}`", $setting_name)
         }
     };
 }
 
-impl DefinitionParser for BoolAttributeDefinition {
+struct BoolDefinitionParser{}
+
+impl DefinitionParser for BoolDefinitionParser {
     const NAME: &'static str = BoolAttributeDefinition::DEFINITION_NAME;
 
     fn parse_definition(
@@ -181,7 +169,9 @@ impl DefinitionParser for BoolAttributeDefinition {
     }
 }
 
-impl DefinitionParser for FieldlessEnumAttributeDefinition {
+struct EnumDefinitionParser{}
+
+impl DefinitionParser for EnumDefinitionParser {
     const NAME: &'static str = FieldlessEnumAttributeDefinition::DEFINITION_NAME;
 
     fn parse_definition(
@@ -205,139 +195,159 @@ impl DefinitionParser for FieldlessEnumAttributeDefinition {
     }
 }
 
-fn parse_string_attribute_definition(
+struct StrDefinitionParser{}
+
+impl DefinitionParser for StrDefinitionParser {
+    const NAME: &'static str = model::StaticStrAttributeDefinition::DEFINITION_NAME;
+
+    fn parse_definition(
         def: &mut model::AttributeDefinition,
         meta: &ParseNestedMeta,
-        name: &str,
         content: syn::parse::ParseBuffer,
-        _return_type: model::ReturnType) -> Result<(), syn::Error> {
-    let strdef = match def {
-        model::AttributeDefinition::StaticStr(def) => def,
-        _ => unreachable!("Mismatched definition for Str: {}", name)
-    };
+        _return_type: model::ReturnType
+    ) -> syn::Result<()> {
+        let setting_name = Self::parse_setting_name(meta)?;
+        let strdef = bind_def!(model::AttributeDefinition::StaticStr, def, setting_name);
 
-    match name {
-       DEFINITION_DEFAULT => {
-            strdef.default = Some(content.parse::<syn::LitStr>()?.value())
-       },
-       DEFINITION_PRESET => {
-            let variant_ident = content.parse::<syn::Ident>()?;
-            let variant_name = variant_ident.to_string();
-            let preset = model::StringPreset::from_str(&variant_name)
-                .or_else(|_| {
-                    synerr!(&meta.path, "Unknown String preset: {}", variant_name)
-                })?;
-            strdef.preset = Some(preset);
-       },
-       _ => synerr!(&meta.path, "Unknown definition property for Str: {}", name)
+        match setting_name.as_str() {
+            Self::DEFINITION_DEFAULT => {
+                    strdef.default = Some(content.parse::<syn::LitStr>()?.value())
+            },
+            Self::DEFINITION_PRESET => {
+                    let variant_ident = content.parse::<syn::Ident>()?;
+                    let variant_name = variant_ident.to_string();
+                    let preset = model::StringPreset::from_str(&variant_name)
+                        .map_err(|_| {
+                            mksynerr!(&meta.path, "Unknown String preset: {}", variant_name)
+                        })?;
+                    strdef.preset = Some(preset);
+            },
+            _ => return Self::err_unknown_setting(&meta.path, setting_name)
+        }
+
+        Ok(())
     }
+}
+struct RelDefinitionParser{}
 
-    Ok(())
+impl RelDefinitionParser {
+    const DEFINITION_NATURE: &'static str = "nature";
+    const DEFINITION_DISPATCH: &'static str = "dispatch";
 }
 
-const DEFINITION_NATURE: &'static str = "nature";
-const DEFINITION_DISPATCH: &'static str = "dispatch";
+impl DefinitionParser for RelDefinitionParser {
+    const NAME: &'static str = model::RelationAttributeDefinition::DEFINITION_NAME;
 
-fn parse_relation_attribute_definition(
+    fn parse_definition(
         def: &mut model::AttributeDefinition,
         meta: &ParseNestedMeta,
-        name: &str,
         content: syn::parse::ParseBuffer,
-        _return_type: model::ReturnType) -> syn::Result<()>
-{
-    let reldef = def.get_relation_definition_mut();
+        _return_type: model::ReturnType
+    ) -> syn::Result<()> {
+        let setting_name = Self::parse_setting_name(meta)?;
+        let reldef = bind_def!(model::AttributeDefinition::Relation, def, setting_name);
 
-    match name {
-        DEFINITION_NATURE => {
-            let variant_ident = content.parse::<syn::Ident>()?;
-            let variant_name = variant_ident.to_string();
-            let relationship = model::RelationNature::from_str(&variant_name)
-                .or_else(|_| synerr!(variant_ident, "Unknown nature: {}", variant_name) )?;
-            reldef.nature = Some(relationship);
-        },
-        DEFINITION_DISPATCH => {
-            let variant_ident = content.parse::<syn::Ident>()?;
-            let variant_name = variant_ident.to_string();
-            let dispatch = model::Dispatch::from_str(&variant_name)
-                .or_else(|_| synerr!(variant_ident, "Unknown dispatch: {}", variant_name) )?;
-            reldef.dispatch = Some(dispatch);
-        },
-        _ => synerr!(&meta.path, "Unknown setting for {} definition: {}", model::RelationAttributeDefinition::DEFINITION_NAME, name)
+        match setting_name.as_str() {
+            Self::DEFINITION_NATURE => {
+                let variant_ident = content.parse::<syn::Ident>()?;
+                let variant_name = variant_ident.to_string();
+                let relationship = model::RelationNature::from_str(&variant_name)
+                    .map_err(|_| mksynerr!(variant_ident, "Unknown nature: {}", variant_name) )?;
+                reldef.nature = Some(relationship);
+            },
+            Self::DEFINITION_DISPATCH => {
+                let variant_ident = content.parse::<syn::Ident>()?;
+                let variant_name = variant_ident.to_string();
+                let dispatch = model::Dispatch::from_str(&variant_name)
+                    .map_err(|_| mksynerr!(variant_ident, "Unknown dispatch: {}", variant_name) )?;
+                reldef.dispatch = Some(dispatch);
+            },
+            _ => return Self::err_unknown_setting(&meta.path, setting_name)
+        }
+
+        Ok(())
     }
-
-    Ok(())
 }
 
-fn parse_number_attribute_definition(
+struct NumDefinitionParser{}
+
+impl NumDefinitionParser {
+    const DEFINITION_START: &'static str = "start";
+    const DEFINITION_INCREMENT: &'static str = "increment";
+
+    fn parse_number_definition<N>(
+            def: &mut model::NumberAttributeDefinition<N>,
+            meta: &ParseNestedMeta,
+            setting_name: &str,
+            content: syn::parse::ParseBuffer,
+            _return_type: model::ReturnType,
+            is_float: bool) -> Result<(), syn::Error>
+    where
+        N: FromStr,
+        N::Err: std::fmt::Display
+    {
+        macro_rules! parsenum {
+            () => {
+                if is_float {
+                        content.parse::<syn::LitFloat>()?.base10_parse()?
+                } else {
+                        content.parse::<syn::LitInt>()?.base10_parse()?
+                } 
+            };
+        }
+
+        match setting_name {
+            Self::DEFINITION_DEFAULT => {
+                    let n: N = parsenum!();
+                    def.default = Some(n)
+            },
+            Self::DEFINITION_PRESET => {
+                    let variant_ident = content.parse::<syn::Ident>()?;
+                    let variant_name = variant_ident.to_string();
+                    let preset = model::NumberPreset::from_str(&variant_name)
+                        .map_err(|_| {
+                            mksynerr!(variant_ident, "Unknown definition preset for Num: {}", variant_name)
+                        })?;
+                    def.preset = Some(preset);
+            },
+            Self::DEFINITION_START => {
+                    let n: N = parsenum!();
+                    def.start = Some(n)
+            },
+            Self::DEFINITION_INCREMENT => {
+                    let n: N = parsenum!();
+                    def.increment = Some(n)
+            },
+            _ => return Self::err_unknown_setting(&meta.path, setting_name.to_owned())
+        }
+
+        Ok(())
+    }
+}
+
+impl DefinitionParser for NumDefinitionParser {
+    const NAME: &'static str = NumberAttributeDefinition::<usize>::DEFINITION_NAME;
+
+    fn parse_definition(
         def: &mut model::AttributeDefinition,
         meta: &ParseNestedMeta,
-        name: &str,
         content: syn::parse::ParseBuffer,
-        return_type: model::ReturnType) -> Result<(), syn::Error>
-{
-    match def {
-        model::AttributeDefinition::UnsignedSize(def) => parse_number_definition(def, meta, name, content, return_type, false),
-        model::AttributeDefinition::UnsignedInteger64(def) => parse_number_definition(def, meta, name, content, return_type, false),
-        model::AttributeDefinition::Integer64(def) => parse_number_definition(def, meta, name, content, return_type, false),
-        model::AttributeDefinition::Float64(def) => parse_number_definition(def, meta, name, content, return_type, true),
-        model::AttributeDefinition::UnsignedInteger32(def) => parse_number_definition(def, meta, name, content, return_type, false),
-        model::AttributeDefinition::Integer32(def) => parse_number_definition(def, meta, name, content, return_type, true),
-        model::AttributeDefinition::Float32(def) => parse_number_definition(def, meta, name, content, return_type, false),
-        _ => synerr!(&meta.path, "Mismatched definition for Num: {}", name)
+        return_type: model::ReturnType
+    ) -> syn::Result<()> {
+        let setting_name = Self::parse_setting_name(meta)?;
+        match def {
+            model::AttributeDefinition::UnsignedSize(def) => Self::parse_number_definition(def, meta, &setting_name, content, return_type, false),
+            model::AttributeDefinition::UnsignedInteger64(def) => Self::parse_number_definition(def, meta, &setting_name, content, return_type, false),
+            model::AttributeDefinition::Integer64(def) => Self::parse_number_definition(def, meta, &setting_name, content, return_type, false),
+            model::AttributeDefinition::Float64(def) => Self::parse_number_definition(def, meta, &setting_name, content, return_type, true),
+            model::AttributeDefinition::UnsignedInteger32(def) => Self::parse_number_definition(def, meta, &setting_name, content, return_type, false),
+            model::AttributeDefinition::Integer32(def) => Self::parse_number_definition(def, meta, &setting_name, content, return_type, true),
+            model::AttributeDefinition::Float32(def) => Self::parse_number_definition(def, meta, &setting_name, content, return_type, false),
+            _ => unreachable!("Unexpected Num definition associated data for setting: {}", setting_name)
+        }
     }
 }
 
-const DEFINITION_START: &'static str = "start";
-const DEFINITION_INCREMENT: &'static str = "increment";
- 
-fn parse_number_definition<N>(
-        def: &mut model::NumberAttributeDefinition<N>,
-        meta: &ParseNestedMeta,
-        name: &str,
-        content: syn::parse::ParseBuffer,
-        _return_type: model::ReturnType,
-        is_float: bool) -> Result<(), syn::Error>
-where
-    N: FromStr,
-    N::Err: std::fmt::Display
-{
-    macro_rules! parsenum {
-        () => {
-           if is_float {
-                content.parse::<syn::LitFloat>()?.base10_parse()?
-           } else {
-                content.parse::<syn::LitInt>()?.base10_parse()?
-           } 
-        };
-    }
-
-    match name {
-       DEFINITION_DEFAULT => {
-            let n: N = parsenum!();
-            def.default = Some(n)
-       },
-       DEFINITION_PRESET => {
-            let variant_ident = content.parse::<syn::Ident>()?;
-            let variant_name = variant_ident.to_string();
-            let preset = model::NumberPreset::from_str(&variant_name)
-                .or_else(|_| {
-                    synerr!(variant_ident, "Unknown definition preset for Num: {}", variant_name)
-                })?;
-            def.preset = Some(preset);
-       },
-       DEFINITION_START => {
-            let n: N = parsenum!();
-            def.start = Some(n)
-       },
-       DEFINITION_INCREMENT => {
-            let n: N = parsenum!();
-            def.increment = Some(n)
-       },
-       _ => synerr!(&meta.path, "Unknown definition property for Num: {}", name)
-    }
-
-    Ok(())
-}
 
 pub(crate) fn parse_variant(variant_name: &str, attr: &syn::Attribute, model: &model::EnumTrait)
         -> Result<model::VariantBuilder, syn::Error> {
