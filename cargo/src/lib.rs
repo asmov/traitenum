@@ -7,22 +7,24 @@ pub mod meta;
 pub mod cli;
 pub mod cmd;
 
+const LOG_PREFIX: &'static str = "[traitenum] ";
+
 #[macro_export]
 macro_rules! str { ($s:literal) => { String::from($s) }; }
 
 pub fn log(quiet: bool, msg: &str) {
     if !quiet {
-        println!("{}{}", "[traitenum] ".cyan(), msg);
+        println!("{}{}", LOG_PREFIX.cyan(), msg);
     }
 }
 
 pub fn log_warn(msg: &str) {
-    eprintln!("{}{}", "[traitenum] ".yellow(), msg);
+    eprintln!("{}{}", LOG_PREFIX.yellow(), msg);
 }
 
 pub fn log_success(quiet: bool, msg: &str) {
     if !quiet {
-        println!("{}{}", "[traitenum] ".green(), msg);
+        println!("{}{}", LOG_PREFIX.green(), msg);
     }
 }
 
