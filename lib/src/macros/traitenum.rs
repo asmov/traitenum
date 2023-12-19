@@ -1,10 +1,10 @@
 use quote::{self, ToTokens};
-use syn;
+use syn::{self, spanned::Spanned};
 use proc_macro2;
 
 use crate::{
     model, model::parse,
-    synerr, mksynerr, span,
+    synerr, mksynerr, span, span_site,
     ERROR_PREFIX, ENUM_ATTRIBUTE_HELPER_NAME};
 
 #[derive(Debug)]
@@ -26,8 +26,8 @@ pub(crate) fn parse_traitenum_macro(
     enumtrait_model_bytes: &[u8]
 ) -> Result<TraitEnumMacroOutput, syn::Error> {
     let enumtrait = model::EnumTrait::deserialize(enumtrait_model_bytes).unwrap();
-    let trait_ident = syn::Ident::new(enumtrait.identifier().name(), span!());
     let input: syn::DeriveInput = syn::parse2(item)?;
+    let trait_ident = syn::Ident::new(enumtrait.identifier().name(), span(&input));
 
     // the actual parsing is done with this call, the rest is building a tokenstream
     let traitenum = parse_traitenum_model(&input, &enumtrait)?;
@@ -36,7 +36,7 @@ pub(crate) fn parse_traitenum_macro(
     // write a method for each one defined by the enum trait, which returns the value defined by each enum variant
     let method_outputs = enumtrait.methods().iter().map(|method| {
         let method_name = method.name();
-        let func: syn::Ident = syn::Ident::new(method_name, span!());
+        let func: syn::Ident = syn::Ident::new(method_name, span(&input));
         let return_type = method.return_type_tokens();
 
         match method.attribute_definition() {
@@ -50,7 +50,7 @@ pub(crate) fn parse_traitenum_macro(
                         match dispatch { 
                             model::Dispatch::BoxedTrait => {
                                 let iterator_ident = syn::Ident::new(
-                                    &format!("{}{}", rel_id.name(), IDENT_BOXED_ITERATOR), span!());
+                                    &format!("{}{}", rel_id.name(), IDENT_BOXED_ITERATOR), span(&input));
                                 
                                 return quote::quote!{
                                     fn #func(&self) -> #return_type {
@@ -123,7 +123,7 @@ pub(crate) fn parse_traitenum_macro(
 fn data_enum(input: &syn::DeriveInput) -> Result<&syn::DataEnum, syn::Error> {
     match input.data {
         syn::Data::Enum(ref data_enum) => Ok(data_enum),
-        _ => synerr!("Only enums are supported for #[{}]", ENUM_ATTRIBUTE_HELPER_NAME)
+        _ => synerr!(input, "Only enums are supported for #[{}]", ENUM_ATTRIBUTE_HELPER_NAME)
     }
 }
 
@@ -137,25 +137,26 @@ fn parse_traitenum_model(input: &syn::DeriveInput, enumtrait: &model::EnumTrait)
         attr.parse_nested_meta(|meta| {
             // this will be the method and relation name as well
             let attr_name = meta.path.get_ident()
-                .ok_or(mksynerr!("Invalid traitenum attribute. It is not an ident token: `{}`",
-                    meta.path.to_token_stream().to_string()))?
+                .ok_or_else(|| {
+                    mksynerr!(attr, "Invalid traitenum attribute")
+                })?
                 .to_string();
 
             // prevent duplicates
             if traitenum_build.has_relation_enum(&attr_name) {
-                synerr!("Duplicate traitenum attribute for enum: {}", attr_name);
+                synerr!(attr, "Duplicate traitenum attribute for enum: {}", attr_name);
             }
 
             // find the matching trait method by name
             let attribute_definition = enumtrait.methods().iter()
                 .find(|m| { m.name() == attr_name })
-                .ok_or_else(|| mksynerr!("No matching trait method for enum attribute: {}", attr_name))?
+                .ok_or_else(|| mksynerr!(attr, "No matching trait method for enum attribute: {}", attr_name))?
                 .attribute_definition();
 
             // ensure that we're using a relation attribute definition for this method
             match attribute_definition {
                 model::AttributeDefinition::Relation(_) => (),
-                _ => synerr!("Trait method definition is not a Relation as expected for enum attribute: {}", attr_name)
+                _ => synerr!(attr, "Trait method definition is not a Relation as expected for enum attribute: {}", attr_name)
             }
 
             let content;
@@ -195,7 +196,7 @@ fn parse_traitenum_model(input: &syn::DeriveInput, enumtrait: &model::EnumTrait)
             } else if !definition.needs_value() {
                 continue;
             } else if !definition.has_default_or_preset() {
-                synerr!("Missing value for attribute `{}`: {}", method_name, variant_name);
+                synerr!(variant, "Missing value for attribute `{}`: {}", method_name, variant_name);
             } else {
                 let value = definition.default_or_preset(&variant_name, ordinal).unwrap();
                 variant_build.value(method_name.to_string(), model::AttributeValue::new(value));
@@ -245,7 +246,7 @@ fn build_boxed_trait_relation_iterators(
         .map(|(_method, _relation_def)| {
             // The name of the iterator struct. E.g., MyEnumBoxedIterator
             let iterator_ident = syn::Ident::new(
-                &format!("{}{}", traitenum.identifier().name(), IDENT_BOXED_ITERATOR), span!());
+                &format!("{}{}", traitenum.identifier().name(), IDENT_BOXED_ITERATOR), span_site());
                 
             let item_path: syn::Path = traitenum.identifier().try_into().unwrap();
             let item_trait_path: syn::Path = enumtrait.identifier().try_into().unwrap();
@@ -253,7 +254,7 @@ fn build_boxed_trait_relation_iterators(
             // Build the match body for the Iterator's next(). This simply maps a traitenum variant by its ordinal.
             let mut ordinal: usize = 0;
             let next_ordinal_match_body = traitenum.variants().iter().map(|variant| {
-                let variant_ident = syn::Ident::new(variant.name(), span!());
+                let variant_ident = syn::Ident::new(variant.name(), span_site());
                 let output = quote::quote!{
                     #ordinal => ::std::option::Option::Some(Box::new(#item_path::#variant_ident)),
                 };

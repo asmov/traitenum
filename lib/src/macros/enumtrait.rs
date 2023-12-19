@@ -44,7 +44,7 @@ pub(crate) fn parse_enumtrait_macro(
     item: proc_macro2::TokenStream) -> syn::Result<EnumTraitMacroOutput>
 {
     if !attr.is_empty() {
-        synerr!("Top-level #[enumtrait] does not accept arguments: {}", attr.to_string());
+        synerr!(attr, "Top-level #[enumtrait] does not accept arguments");
     }
 
     let mut trait_input: syn::ItemTrait = syn::parse2(item)?;
@@ -57,7 +57,7 @@ pub(crate) fn parse_enumtrait_macro(
         match trait_item {
             // Build a model Method
             syn::TraitItem::Fn(func) => parse_trait_fn(&mut methods, func)?,
-            syn::TraitItem::Type(_) => synerr!("Associated types are not supported"),
+            syn::TraitItem::Type(t) => synerr!(t, "Associated types are not supported"),
             _ => ()
         }
     }
@@ -89,7 +89,8 @@ fn parse_trait_fn(methods: &mut Vec<model::Method>, func: &syn::TraitItemFn) -> 
 
     // 2. throw the error
     if attrib.is_some() {
-        synerr!("Wrong attribute helper was used for trait: `#[{}]`. Please use for `#[{}]` traits.",
+        synerr!(attrib.unwrap(),
+            "Wrong attribute helper was used for trait: `#[{}]`. Please use for `#[{}]` traits.",
             ENUM_ATTRIBUTE_HELPER_NAME, TRAIT_ATTRIBUTE_HELPER_NAME);
     }
 
@@ -106,12 +107,16 @@ fn parse_trait_fn(methods: &mut Vec<model::Method>, func: &syn::TraitItemFn) -> 
         parse::parse_attribute_definition(attrib, return_type, return_type_identifier)?
     } else {
         model::AttributeDefinition::partial(None, return_type, return_type_identifier)
-            .map_err(|e| mksynerr!("Unable to parse definition from return signature for `{}` :: {}", method_name, e))?
+            .map_err(|e| {
+                mksynerr!(&func.sig,
+                    "Unable to parse definition from return signature for `{}` :: {}",
+                    method_name, e)
+            })?
     };
 
     // Now perform a validation pass on all attribute definitions to enforce each def's specific rules
     if let Err(errmsg) = attribute_def.validate() {
-        synerr!(errmsg);
+        synerr!(attrib, "{}", errmsg);
     }
 
     let method = model::Method::new(method_name, return_type, attribute_def);
@@ -125,7 +130,7 @@ fn parse_trait_fn_return(func: &syn::TraitItemFn) -> syn::Result<(model::ReturnT
     let mut return_type_identifier: Option<model::Identifier> = None;
 
     match &func.sig.output {
-        syn::ReturnType::Default => synerr!("Default return types () are not supported"),
+        syn::ReturnType::Default => synerr!(&func.sig, "Default return types () are not supported"),
         syn::ReturnType::Type(_, ref returntype) => match **returntype {
             syn::Type::Path(ref path_type) => {
                 if let Ok(ret_type) = model::ReturnType::try_from(&path_type.path) {
@@ -140,16 +145,22 @@ fn parse_trait_fn_return(func: &syn::TraitItemFn) -> syn::Result<(model::ReturnT
                     return_type = Some(model::ReturnType::AssociatedType);
                     return_type_identifier = match model::Identifier::try_from(&path_type.path) {
                         Ok(id) => Some(id),
-                        Err(_) => synerr!("Unsupported return type: {}",
-                            &path_type.path.to_token_stream().to_string())
+                        Err(_) => {
+                            synerr!(return_type,
+                                "Unsupported return type: {}",
+                                &path_type.path.to_token_stream().to_string())
+                        }
                     }
                 } else {
                     // Anything else is modeled as ReturnType::Type, including enums.
                     return_type = Some(model::ReturnType::Type);
                     return_type_identifier = match model::Identifier::try_from(&path_type.path) {
                         Ok(id) => Some(id),
-                        Err(_) => synerr!("Unsupported return type: {}",
-                            &path_type.path.to_token_stream().to_string())
+                        Err(_) => {
+                            synerr!(return_type,
+                                "Unsupported return type: {}",
+                                &path_type.path.to_token_stream().to_string())
+                        }
                     }
                 }
             },
@@ -161,7 +172,7 @@ fn parse_trait_fn_return(func: &syn::TraitItemFn) -> syn::Result<(model::ReturnT
                         if "static" == lifetime.ident.to_string() {
                             true
                         } else {
-                            synerr!("Only elided and static lifetimes are supported for return types")
+                            synerr!(ref_type, "Only elided and static lifetimes are supported for return types")
                         }
                     },
                     None => false
@@ -169,7 +180,7 @@ fn parse_trait_fn_return(func: &syn::TraitItemFn) -> syn::Result<(model::ReturnT
 
                 // mutability is not supported
                 if ref_type.mutability.is_some() {
-                    synerr!("Mutable return types are not supported")
+                    synerr!(ref_type, "Mutable return types are not supported");
                 }
 
                 // basically just ensure that the ident is a "str"
@@ -183,10 +194,10 @@ fn parse_trait_fn_return(func: &syn::TraitItemFn) -> syn::Result<(model::ReturnT
 
                 // ... the else statement for each nested if statement above
                 if return_type.is_none() {
-                    synerr!("Unsupported return reference type: {}", ref_type.to_token_stream().to_string())
+                    synerr!(ref_type, "Unsupported return reference type")
                 }
             },
-            _ => synerr!("Unimplemented trait return type"),
+            _ => synerr!(return_type, "Unimplemented trait return type"),
         }
     }
 
@@ -196,31 +207,31 @@ fn parse_trait_fn_return(func: &syn::TraitItemFn) -> syn::Result<(model::ReturnT
 
 fn parse_box_trait_bound(path: &syn::Path) -> syn::Result<&syn::TraitBound> {
     if path.segments[0].ident != IDENT_BOX {
-        synerr!("Expected a Box<>: {}", path.to_token_stream()) 
+        synerr!(path, "Expected a Box<..>") 
     }
 
     // -> Box< dyn Trait >
     //       ^~~~~~~~~~~~^
     let bracket_args = match &path.segments[0].arguments {
         syn::PathArguments::AngleBracketed(v) => v,
-        _ => synerr!("Invalid use of Box: {}", path.to_token_stream())
+        _ => synerr!(&path.segments[0], "Unsupported use of Box")
     };
 
     let arg_type = match &bracket_args.args[0] {
         syn::GenericArgument::Type(v) => v,
-        _ => synerr!("Invalid use of Box: {}", path.to_token_stream())
+        _ => synerr!(&bracket_args.args[0], "Invalid use of Box")
     };
 
     // -> Box< dyn Trait >
     //         ^~~~~~~~^
     let trait_obj = match arg_type {
         syn::Type::TraitObject(v) => v,
-        _ => synerr!("Unsupported use of Box. Only <dyn EnumTrait> arguments allowed: {}", path.to_token_stream())
+        _ => synerr!(&arg_type, "Unsupported use of Box. Only <dyn EnumTrait> arguments allowed")
     };
 
     let trait_bound = match trait_obj.bounds[0] {
         syn::TypeParamBound::Trait(ref v) => v,
-        _ => synerr!("Unsupported use of Box. Only <dyn EnumTrait> arguments allowed: {}", path.to_token_stream())
+        _ => synerr!(&trait_obj.bounds[0], "Unsupported use of Box. Only <dyn EnumTrait> arguments allowed")
     };
 
     Ok(trait_bound)
@@ -239,7 +250,7 @@ fn try_parse_trait_fn_return_boxed(
         try_parse_trait_fn_return_boxed_trait_iterator(trait_bound)
     } else {
         let id = model::Identifier::try_from(&trait_bound.path)
-            .map_err(|_| mksynerr!("Unable to parse Boxed trait identifier: {}", trait_bound.path.to_token_stream()))?;
+            .map_err(|_| mksynerr!(&trait_bound.path, "Unable to parse Boxed trait identifier"))?;
 
         Ok(Some((model::ReturnType::BoxedTrait, id)))
     }
@@ -252,31 +263,31 @@ fn try_parse_trait_fn_return_boxed_trait_iterator(
     //                    ^~~~~~~~~~~~~~~~~~~~~~^ 
     let bracket_args = match &trait_bound.path.segments[0].arguments {
         syn::PathArguments::AngleBracketed(v) => v,
-        _ => synerr!("Invalid use of Box<dyn Iterator>: {}", trait_bound.to_token_stream())
+        _ => synerr!(&trait_bound.path.segments[0], "Invalid use of Box<dyn Iterator>")
     };
 
     let assoc_type = match &bracket_args.args[0] {
         syn::GenericArgument::AssocType(v) => v,
-        _ => synerr!("Invalid use of Box<dyn Iterator>: {}", trait_bound.to_token_stream())
+        _ => synerr!(&bracket_args.args[0], "Invalid use of Box<dyn Iterator>")
     };
 
     if assoc_type.ident != IDENT_ITEM {
-        synerr!("Invalid use of Box<dyn Iterator>: {}", trait_bound.to_token_stream())
+        synerr!(assoc_type, "Invalid use of Box<dyn Iterator>");
     }
 
     // -> Box<dyn Iterator<Item = Box<dyn Trait>>>
     //                            ^~~~~~~~~~~~~^
     let item_trait_path = match assoc_type.ty {
         syn::Type::Path(ref v) => &v.path,
-        _ => synerr!("Invalid use of Box<dyn Iterator>: {}", trait_bound.to_token_stream())
+        _ => synerr!(&assoc_type.ty, "Invalid use of Box<dyn Iterator>")
     };
 
     let item_box_trait_bound = parse_box_trait_bound(item_trait_path)?;
     
     let id = model::Identifier::try_from(&item_box_trait_bound.path)
         .map_err(|_| {
-            mksynerr!("Unable to parse Boxed trait iterator identifier: {}",
-                item_box_trait_bound.path.to_token_stream())
+            mksynerr!(&item_box_trait_bound.path,
+                "Unable to parse Boxed trait iterator identifier")
         })?;
 
     Ok(Some((model::ReturnType::BoxedTraitIterator, id)))
@@ -301,7 +312,7 @@ fn clean_helper_attributes(trait_input: &mut syn::ItemTrait) -> syn::Result<()> 
 
                 // we only process one attribute helper per method. curtail expectations with an error.
                 if count > 1 {
-                    synerr!("Only one #traitenum helper attribute per method is supported");
+                    synerr!(trait_input, "Only one #traitenum helper attribute per method is supported");
                 }
             
             },

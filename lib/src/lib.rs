@@ -4,10 +4,14 @@ pub mod macros;
 
 pub(crate) const TRAIT_ATTRIBUTE_HELPER_NAME: &'static str = "enumtrait";
 pub(crate) const ENUM_ATTRIBUTE_HELPER_NAME: &'static str = "traitenum";
-pub(crate) const ERROR_PREFIX: &'static str = "traitenum: ";
+pub(crate) const ERROR_PREFIX: &'static str = "[traitenum] ";
 
 pub fn span(source: impl quote::ToTokens) -> ::proc_macro2::Span {
     syn::spanned::Spanned::span(&source.to_token_stream()) 
+}
+
+pub fn span_site() -> ::proc_macro2::Span {
+    ::proc_macro2::Span::call_site()
 }
 
 /// Creates an Err(syn::Error) object. The error message is built using format!() and supports variable arguments.
@@ -17,7 +21,7 @@ pub fn span(source: impl quote::ToTokens) -> ::proc_macro2::Span {
 /// Use `synerr!()` to force a `return` from the current block with an Err() of this value.
 #[macro_export]
 macro_rules! mksynerr {
-    ($source:expr, $message:expr) => {
+    ($source:expr, $message:literal) => {
         ::syn::Error::new(crate::span($source), format!("{}{}", ERROR_PREFIX, $message))
     };
     ($source:expr, $message:literal, $($v:expr),+) => {
@@ -35,11 +39,13 @@ macro_rules! mksynerr {
 /// Use `mksynerr!()` to simply generate a syn::Error.
 #[macro_export]
 macro_rules! synerr {
-    ($source:expr, $message:expr) => {
+    ($source:expr, $message:literal) => {
         return Err(mksynerr!($source, $message))
     };
     ($source:expr, $message:literal, $($v:expr),+) => {
-        return Err(mksynerr!($source, $message))
+        return Err(::syn::Error::new(crate::span($source), format!("{}{}", ERROR_PREFIX, format!($message
+            $( , $v)+
+        ))))
     };
 }
 
