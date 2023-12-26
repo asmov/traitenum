@@ -6,6 +6,7 @@ Planning
 
 ### Whiteboards
 - [Whiteboard: Initial design 2023-11-02](./whiteboard-planning_2023-11-02.png)
+- [Whiteboard: Inline design 2023-12-26](./whiteboard-planning_2023-12-26.jpeg)
 
 
 Reference material
