@@ -1,3 +1,5 @@
+//! Handles all workspace commands (init, new).
+ 
 use std::{env, fs, process, path::{PathBuf, Path}};
 use anyhow::{self, Context};
 use convert_case::{self as case, Casing};

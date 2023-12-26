@@ -1,3 +1,5 @@
+//! Handles all enumtrait commands (add, remove, etc.)
+
 use crate::meta;
 
 pub mod add;

@@ -17,12 +17,13 @@ Version 1
   + value on enum: e.g., #[traitenum(name(Some("foo")))] and #[traitenum(name(None))]
 - Relationships
   + OnetoOne
-- Implement a common TraitEnum trait for each enum, including:
-  + type StaticIterator: Iterator<Item = Self>
+- Implement a common EnumTrait trait for each enum, including:
+  + type Iterator: Iterator<Item = Self>
   + variant_ordinal(&self) -> usize :: Num(preset(Ordinal))
-  + variant_iter() -> Self::StaticIterator
+  + variant_iter() -> Self::Iterator
   + variant_name(&self) -> &'static str :: Str(preset(Variant))
   + from_variant_name(&str) -> Option<Self>
+- Inline
 - Polishing: Document, Refactor, Test
   + lib, macro, cargo
   + Make errors more helpful to end-users. Include tips 

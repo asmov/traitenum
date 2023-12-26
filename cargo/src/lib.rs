@@ -9,25 +9,30 @@ pub mod cmd;
 
 const LOG_PREFIX: &'static str = "[traitenum] ";
 
+/// Converts a string literal into a String
 #[macro_export]
 macro_rules! str { ($s:literal) => { String::from($s) }; }
 
+/// Logs to stdout, if not quiet
 pub fn log(quiet: bool, msg: &str) {
     if !quiet {
         println!("{}{}", LOG_PREFIX.cyan(), msg);
     }
 }
 
+/// Logs a warning to stderr
 pub fn log_warn(msg: &str) {
     eprintln!("{}{}", LOG_PREFIX.yellow(), msg);
 }
 
+/// Logs to stdout, if not quiet
 pub fn log_success(quiet: bool, msg: &str) {
     if !quiet {
         println!("{}{}", LOG_PREFIX.green(), msg);
     }
 }
 
+/// Errors for the cargo addon
 #[derive(Debug, thiserror::Error)]
 pub enum Errors {
     #[error("Unable to parse source-code. {0}: {1}")]
@@ -72,6 +77,7 @@ pub enum Errors {
     CargoError(String),
 }
 
+/// Runs the program
 pub fn run(cli: cli::Cli) -> anyhow::Result<()> {
     match cli.module {
         cli::CommandModules::Workspace(module) => match module.command {
