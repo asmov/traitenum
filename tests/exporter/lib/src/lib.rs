@@ -1,15 +1,7 @@
 use traitenum::{self, enumtrait};
 
-#[traitenum::enumtrait]
-pub trait SimpleTrait {
-    #[enumtrait::Str(default("spunko"))]
-    fn name(&self) -> &'static str;
-    fn column(&self) -> usize;
-
-    fn default_impl(&self) -> String {
-        format!("{} :: {}", self.name(), self.column())
-    }
-}
+pub mod simple_trait;
+pub use simple_trait::{SimpleTrait, TRAITENUM_MODEL_BYTES_SIMPLE_TRAIT};
 
 #[enumtrait]
 pub trait ParentTrait {
@@ -39,7 +31,7 @@ mod tests {
 
     #[test]
     fn test_load_model() {
-        let bytes = super::TRAITENUM_MODEL_BYTES_SIMPLE_TRAIT;
+        let bytes = crate::simple_trait::TRAITENUM_MODEL_BYTES_SIMPLE_TRAIT;
         let _model: traitenum_lib::model::EnumTrait = bincode::deserialize(bytes).unwrap();
     }
 }

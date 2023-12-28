@@ -4,6 +4,7 @@ use traitenum_test_exporter::ParentTrait;
 use traitenum_test_exporter::ChildTrait;
 
 #[derive(exporter_derive::SimpleTraitEnum)]
+//#[traitenum::implements(SimpleTrait)]
 pub enum ImporterEnum {
     #[traitenum(name("alpha"), column(0))]
     Alpha,

@@ -1,4 +1,4 @@
-Design Notes for Version 0
+Design Notes for Version 2
 ==========================
 
 Planning
