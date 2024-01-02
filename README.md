@@ -33,8 +33,6 @@ Relationships require a method signature to return:
 - `OneToMany`
   + `-> Box<dyn Iterator<Item = Box<dyn OtherTrait>>>`
 
-We'll take care of the rest!
-
 Example
 -------
 
@@ -124,7 +122,7 @@ Structure
 License (GPL 3)
 ---------------
 traitenum: A Rust library for using fieldless enums as schema definitions.  
-Copyright (C) 2023 Asmov LLC
+Copyright (C) 2023-2024 Asmov LLC
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
